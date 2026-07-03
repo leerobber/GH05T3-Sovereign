@@ -105,7 +105,15 @@ class MultiBitLinear4(nn.Module):
         self.weight = nn.Parameter(
             torch.randint(-8, 8, (out_features, in_features)).float()
         )
-        self.scale = nn.Parameter(torch.ones(out_features))
+        # Summing `in_features` terms of a ~[-8,7]-valued weight against a
+        # ~[-1,1]-valued quantized input gives a pre-scale output stddev of
+        # roughly sqrt(in_features) * O(1) -- e.g. ~37 at in_features=256.
+        # scale=1 left logits wildly overscaled at init (measured initial
+        # training loss ~100-160 nats vs. the ~5.5 a random 256-way
+        # classifier should start at). Fan-in scaling (1/sqrt(in_features),
+        # the standard Kaiming/Xavier-style correction) brings the output
+        # back to a well-calibrated O(1-3) range at initialization.
+        self.scale = nn.Parameter(torch.full((out_features,), 1.0 / (in_features ** 0.5)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_q = _RoundSTE.apply(torch.clamp(x * 8, -8, 7)) / 8.0

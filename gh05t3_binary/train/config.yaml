@@ -1,0 +1,11 @@
+epochs: 20
+batch_size: 8
+seq_len: 64
+lr: 3e-4
+dim: 256
+num_layers: 4
+num_heads: 4
+vocab_size: 256
+binary_ratio: 0.95
+dataset: gh05t3_binary/train/data.txt
+checkpoint: gh05t3_binary/train/checkpoints/binary_v2.pt

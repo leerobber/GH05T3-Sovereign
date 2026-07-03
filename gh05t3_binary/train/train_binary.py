@@ -1,3 +1,6 @@
+import json
+import os
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -14,7 +17,14 @@ def train_binary_transformer(
     batch_size: int = 8,
     seq_len: int = 64,
     lr: float = 3e-4,
+    state=None,
 ):
+    """state, if given, is a backend.runtime.gh05t3_orchestrator.GH05T3State
+    to update in-process. Progress is also always written to a
+    training_state.json sidecar next to save_path -- that's the only way
+    a separately-running process (e.g. an API server) can see it, since
+    training is normally invoked as its own script/process with no shared
+    memory with anything else."""
     tokenizer = SimpleCharTokenizer()
 
     with open(data_path, "r", encoding="utf-8") as f:
@@ -39,6 +49,8 @@ def train_binary_transformer(
 
     print(f"Training on {device} with {len(dataset)} samples...")
 
+    loss_curve: list = []
+
     for epoch in range(epochs):
         model.train()
         total_loss = 0.0
@@ -61,7 +73,17 @@ def train_binary_transformer(
             total_loss += loss.item()
 
         avg = total_loss / len(loader)
+        loss_curve.append(avg)
         print(f"Epoch {epoch+1}/{epochs} — loss={avg:.4f}")
+
+        if state is not None:
+            state.binary_training_loss_curve.append(avg)
+            state.binary_training_epochs += 1
+            state.binary_training_last_checkpoint = save_path
+
+        save_dir = os.path.dirname(save_path)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
 
         torch.save(
             {
@@ -74,7 +96,27 @@ def train_binary_transformer(
             save_path,
         )
 
+        _write_training_state_sidecar(save_path, epoch + 1, avg, loss_curve)
+
     print(f"Training complete. Saved checkpoint to {save_path}")
+
+
+def _write_training_state_sidecar(save_path: str, epochs_done: int, last_loss: float, loss_curve) -> None:
+    """Writes gh05t3_binary/train/training_state.json (next to save_path's
+    directory) so backend/api/binary_training.py can report real progress
+    without needing an in-memory reference to this training run."""
+    sidecar_path = os.path.join(os.path.dirname(save_path) or ".", "training_state.json")
+    with open(sidecar_path, "w") as f:
+        json.dump(
+            {
+                "epochs": epochs_done,
+                "last_loss": last_loss,
+                "loss_curve": loss_curve,
+                "checkpoint": save_path,
+            },
+            f,
+            indent=2,
+        )
 
 
 if __name__ == "__main__":

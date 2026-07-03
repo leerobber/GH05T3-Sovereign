@@ -29,6 +29,7 @@ backend/data/
 *.safetensors
 *.jsonl
 *.pt
+gh05t3_binary/train/checkpoints/
 
 # Build artifacts
 *.log

@@ -21,7 +21,7 @@ import os
 _MODEL_CACHE: dict = {}
 _VOCAB_SIZE = 256  # matches the naive byte-level tokenizer below
 CHECKPOINT_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "gh05t3_binary", "train", "binary_checkpoint.pt"
+    os.path.dirname(__file__), "..", "..", "gh05t3_binary", "train", "checkpoints", "binary_v2.pt"
 )
 
 
