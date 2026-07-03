@@ -8,6 +8,7 @@ import json
 import time
 from typing import Any, Dict, List
 
+from backend.integration.binary_backend import run_binary_transformer_tier
 from backend.integration.gml_kernel_bridge import (
     check_dependencies,
     run_gh05t3_kernel_core_json,
@@ -44,6 +45,12 @@ def handle_model_calls(kernel_view: Dict[str, Any]) -> List[str]:
       - "v4": multi-backend blending via run_multi_model_via_ghost_llm
         (detected by the "backends" key, not by version string, since v4
         payloads carry their own version field independently)
+
+    backend == "binary_kernel" is checked before version, regardless of
+    version string: it routes to the local gh05t3_binary transformer
+    (backend/integration/binary_backend.py) instead of ghost_llm entirely.
+    That model is untrained (random weights, no checkpoint) — its output
+    is a diagnostic forward-pass report, not real text.
     """
     outputs: List[str] = []
 
@@ -69,7 +76,9 @@ def handle_model_calls(kernel_view: Dict[str, Any]) -> List[str]:
             prompt = payload.get("prompt", "")
             backend = payload.get("backend", "claude")
 
-            if version == "v3":
+            if backend == "binary_kernel":
+                outputs.append(run_binary_transformer_tier(prompt))
+            elif version == "v3":
                 full_text, _chunks = stream_model_via_ghost_llm(
                     prompt=prompt, backend=backend, version=version,
                 )

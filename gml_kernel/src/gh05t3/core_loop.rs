@@ -85,6 +85,18 @@ fn build_gh05t3_core_loop() -> GlyphBlock {
         ])),
     };
 
+    let model_call_binary = GlyphInstance {
+        glyph: GLYPHS.iter().find(|g| g.code == "MODEL_CALL").unwrap(),
+        params: GlyphParams::Map(std::collections::HashMap::from([
+            ("backend".into(), "binary_kernel".into()),
+            (
+                "prompt".into(),
+                "Run a diagnostic forward pass through the binary transformer.".into(),
+            ),
+            ("version".into(), "v2".into()),
+        ])),
+    };
+
     let plan_chain = GlyphInstance {
         glyph: GLYPHS.iter().find(|g| g.code == "PLAN_CHAIN").unwrap(),
         params: GlyphParams::None,
@@ -128,6 +140,7 @@ fn build_gh05t3_core_loop() -> GlyphBlock {
             model_call,
             model_call_blend,
             model_call_stream,
+            model_call_binary,
             plan_chain,
             act_tool,
             reflect_self,
