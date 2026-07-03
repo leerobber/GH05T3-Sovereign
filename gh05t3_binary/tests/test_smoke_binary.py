@@ -32,6 +32,26 @@ def test_binary_transformer_gradients_flow():
     assert torch.any(binary_weight.grad != 0)
 
 
+def test_causal_mask_blocks_future_tokens():
+    """Changing a later token must not change an earlier position's logits
+    -- otherwise the model isn't actually causal, and next-token training
+    on it would be predicting positions that can already see themselves."""
+    model = _small_model()
+    model.eval()
+
+    ids_a = torch.randint(0, 100, (1, 16))
+    ids_b = ids_a.clone()
+    ids_b[0, 10] = (ids_b[0, 10] + 1) % 100  # change a later token
+
+    with torch.no_grad():
+        logits_a = model(ids_a)
+        logits_b = model(ids_b)
+
+    # Positions before the changed index must be identical; the changed
+    # position itself (and anything after) may legitimately differ.
+    assert torch.allclose(logits_a[:, :10], logits_b[:, :10], atol=1e-5)
+
+
 def test_hardware_dispatcher_matmul():
     detector = HardwareDetector()
     dispatcher = HardwareAwareBinaryDispatcher(detector)

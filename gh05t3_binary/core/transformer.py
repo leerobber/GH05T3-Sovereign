@@ -1,9 +1,16 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
 
 from .binary_layers import InputNormalizedBinaryLinear, MultiBitLinear4
 from .attention import HybridBinaryAttention
 from .stabilizers import MagnitudeGrowthClamper, OrthogonalResidualDecomposer
+
+
+def _causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
+    """1 = attend, 0 = block (matches HybridBinaryAttention's masked_fill(mask==0, -inf))."""
+    return torch.tril(torch.ones(seq_len, seq_len, device=device)).view(1, 1, seq_len, seq_len)
 
 
 class BinaryTransformerBlock(nn.Module):
@@ -48,8 +55,8 @@ class BinaryTransformerBlock(nn.Module):
             InputNormalizedBinaryLinear(4 * dim, dim),
         )
 
-    def forward(self, x: torch.Tensor, depth: int = 0) -> torch.Tensor:
-        attn_output = self.out_proj(self.attention(self.norm1(x)))
+    def forward(self, x: torch.Tensor, depth: int = 0, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        attn_output = self.out_proj(self.attention(self.norm1(x), mask=mask))
         x = self.attn_clamp(x, self.attn_diversify(attn_output))
 
         mlp_output = self.mlp(self.norm2(x))
@@ -88,8 +95,9 @@ class GH05T3BinaryTransformer(nn.Module):
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         x = self.embedding(input_ids)
+        mask = _causal_mask(input_ids.size(1), input_ids.device)
         for depth, layer in enumerate(self.layers):
-            x = layer(x, depth=depth)
+            x = layer(x, depth=depth, mask=mask)
         x = self.final_norm(x)
         return self.head(x)
 

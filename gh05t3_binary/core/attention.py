@@ -48,15 +48,24 @@ class HybridBinaryAttention(nn.Module):
 
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
 
-        if mask is not None:
-            scores = scores.masked_fill(mask == 0, float("-inf"))
-
         if r >= 1.0:
             scores = scores * (self.binary_ratio ** 2)
             v = v * self.binary_ratio
 
+        # Divide by temperature (a trainable parameter) before masking, not
+        # after: masked_fill's -inf must be the last op before softmax.
+        # Dividing an already-masked -inf score by temperature is fine in
+        # the forward pass (-inf stays -inf), but its backward computes a
+        # gradient contribution from those masked positions that multiplies
+        # out to 0 * inf = NaN once combined with softmax's zero gradient
+        # there -- a classic masking + division ordering bug.
         temperature = torch.exp(self.log_temperature)
-        attn = F.softmax(scores / temperature, dim=-1)
+        scores = scores / temperature
+
+        if mask is not None:
+            scores = scores.masked_fill(mask == 0, float("-inf"))
+
+        attn = F.softmax(scores, dim=-1)
         out = torch.matmul(attn, v)
 
         out = out.transpose(1, 2).reshape(B, S, self.dim)
