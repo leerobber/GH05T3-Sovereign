@@ -1,0 +1,133 @@
+{
+  "consumer": {
+    "name": "gh05t3-gateway"
+  },
+  "provider": {
+    "name": "gh05t3-oss"
+  },
+  "interactions": [
+    {
+      "description": "a request for MVS status",
+      "providerState": "MVS substrate is initialized with genomes",
+      "request": {
+        "method": "GET",
+        "path": "/oss/mvs/status"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+        },
+        "body": {
+          "available": true,
+          "genomes": {
+            "total_genomes": 100,
+            "roles": [
+              "SCIENTIST"
+            ]
+          },
+          "loop_state": {
+            "species": "S5_evolve",
+            "aggregate": 0.65,
+            "omni_mind": 0.62
+          },
+          "source": "backend.oss.mvs + oss_ecosystem.json"
+        },
+        "matchingRules": {
+          "$.body": {
+            "match": "type"
+          },
+          "$.body.genomes": {
+            "match": "type"
+          },
+          "$.body.genomes.roles": {
+            "min": 1
+          },
+          "$.body.genomes.roles[*].*": {
+            "match": "type"
+          },
+          "$.body.loop_state": {
+            "match": "type"
+          }
+        }
+      }
+    },
+    {
+      "description": "a dry-run cycle request",
+      "providerState": "MVS is ready to run cycles",
+      "request": {
+        "method": "POST",
+        "path": "/oss/mvs/cycle",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "cycles": 2,
+          "dry_run": true
+        },
+        "matchingRules": {
+          "$.body": {
+            "match": "type"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+        },
+        "body": {
+          "ran": 2,
+          "dry_run": true,
+          "results": [
+            {
+              "tick": 0,
+              "global": "S0_perceive",
+              "agg": 0.67
+            }
+          ],
+          "duration_sec": 0.123
+        },
+        "matchingRules": {
+          "$.body": {
+            "match": "type"
+          },
+          "$.body.results": {
+            "min": 1
+          },
+          "$.body.results[*].*": {
+            "match": "type"
+          },
+          "$.body.duration_sec": {
+            "match": "type"
+          }
+        }
+      }
+    },
+    {
+      "description": "health check",
+      "providerState": "service is up",
+      "request": {
+        "method": "GET",
+        "path": "/oss/health"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+        },
+        "body": {
+          "status": "ok",
+          "layer": "oss"
+        },
+        "matchingRules": {
+          "$.body": {
+            "match": "type"
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "2.0.0"
+    }
+  }
+}

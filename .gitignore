@@ -1,0 +1,39 @@
+# Secrets
+.env
+.env.*
+*.pem
+*credential*
+*secret*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Rust
+target/
+Cargo.lock
+
+# Local models
+models/
+*.bin
+*.gguf
+
+# Build artifacts
+*.log
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# Training data/checkpoints — large binaries, don't belong in git
+backend/training/checkpoints/
+backend/data/
+*.safetensors
+*.jsonl
+*.pt
+
+# Databases — may carry embedded runtime/secret data
+*.db

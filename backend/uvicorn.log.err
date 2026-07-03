@@ -1,0 +1,40 @@
+INFO:     Started server process [11824]
+INFO:     Waiting for application startup.
+2026-05-09 19:02:13,976 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-09 19:02:13,978 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-09 19:02:13,979 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-09 19:02:13,979 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-09 19:02:13,979 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-09 19:02:13,979 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-09 19:02:13,980 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-09 19:02:13,980 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-09 19:02:13,981 - apscheduler.scheduler - INFO - Added job "_job_training_pipeline" to job store "default"
+2026-05-09 19:02:13,982 - apscheduler.scheduler - INFO - Added job "_job_kairos_nightly" to job store "default"
+2026-05-09 19:02:13,982 - apscheduler.scheduler - INFO - Added job "_job_amplifiers_nightly" to job store "default"
+2026-05-09 19:02:13,982 - apscheduler.scheduler - INFO - Added job "_job_dream" to job store "default"
+2026-05-09 19:02:13,982 - apscheduler.scheduler - INFO - Added job "_job_daily_summary" to job store "default"
+2026-05-09 19:02:13,982 - apscheduler.scheduler - INFO - Added job "_job_weekly_review" to job store "default"
+2026-05-09 19:02:13,982 - apscheduler.scheduler - INFO - Added job "_job_memory_decay" to job store "default"
+2026-05-09 19:02:13,983 - apscheduler.scheduler - INFO - Added job "_job_memory_prune" to job store "default"
+2026-05-09 19:02:13,983 - apscheduler.scheduler - INFO - Scheduler started
+2026-05-09 19:02:13,985 - ghost.peers - INFO - PeerMesh auto-sync every 300s
+2026-05-09 19:02:14,476 - httpx - INFO - HTTP Request: GET http://localhost:11434/v1/models "HTTP/1.1 200 OK"
+2026-05-09 19:02:14,479 - ghost - INFO - GH05T3 gateway online — ollama=yes db=ok peers=0 label=TatorTot role=primary
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+2026-05-09 19:02:14,819 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getMe "HTTP/1.1 200 OK"
+2026-05-09 19:02:14,822 - ghost.telegram - INFO - telegram poller started @GH05T3_bot
+2026-05-09 19:02:20,775 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:02:31,923 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:02:43,084 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:02:54,132 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:03:05,146 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:03:16,134 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:03:27,152 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:03:38,176 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:03:49,236 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:04:00,295 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:04:11,358 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:04:22,589 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:04:33,571 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"
+2026-05-09 19:04:44,575 - httpx - INFO - HTTP Request: GET https://api.telegram.org/bot8759701167:AAH5X82v0V7lP2w7x2fWY6_E-AtavaZwaBE/getUpdates?offset=0&timeout=25 "HTTP/1.1 409 Conflict"

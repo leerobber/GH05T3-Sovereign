@@ -1,0 +1,17 @@
+{
+  "id": "tatortot/gh05t3-fine-tune-2xt4",
+  "title": "GH05T3 Fine-Tune — 2xT4",
+  "code_file": "gh05t3_finetune_2xT4.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "accelerator": "nvidiagput4x2",
+  "dataset_sources": [
+    "tatortot/gh05t3-datasets"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
