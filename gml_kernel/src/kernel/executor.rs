@@ -39,6 +39,7 @@ fn execute_glyph(instance: &GlyphInstance, agent: &mut AgentRuntime, kernel: &mu
     match instance.glyph.code {
         "SENSE_IN" => sense_in(instance, agent, kernel),
         "MODEL_CALL" => model_call(instance, agent, kernel),
+        "MODEL_EVAL" => model_eval(instance, agent, kernel),
         "MODEL_ERROR" => model_error(instance, agent, kernel),
         "PLAN_CHAIN" => plan_chain(instance, agent, kernel),
         "ACT_TOOL" => act_tool(instance, agent, kernel),
@@ -86,6 +87,34 @@ fn model_call(instance: &GlyphInstance, agent: &mut AgentRuntime, _: &mut Kernel
         }
         _ => crate::ffi::model_call_summary(&backend_name, &prompt, &version, meta),
     };
+    agent.memory.short_term.push(response);
+}
+
+fn model_eval(instance: &GlyphInstance, agent: &mut AgentRuntime, _: &mut KernelState) {
+    // Single-backend only (no blend) -- evaluation runs a fixed prompt
+    // against one named backend post-training. Pushes the same v2 JSON
+    // payload shape as model_call, so the orchestrator's generic
+    // "backend" in payload scan (handle_model_calls) picks it up without
+    // needing to know which glyph produced it.
+    let mut backend_name = "claude".to_string();
+    let mut prompt = "Default evaluation prompt from GH05T3 core loop".to_string();
+    let mut version = "v2".to_string();
+    let mut meta = std::collections::HashMap::new();
+
+    if let GlyphParams::Map(m) = &instance.params {
+        for (k, v) in m {
+            match k.as_str() {
+                "backend" => backend_name = v.clone(),
+                "prompt" => prompt = v.clone(),
+                "version" => version = v.clone(),
+                _ => {
+                    meta.insert(k.clone(), v.clone());
+                }
+            }
+        }
+    }
+
+    let response = crate::ffi::model_call_summary(&backend_name, &prompt, &version, meta);
     agent.memory.short_term.push(response);
 }
 

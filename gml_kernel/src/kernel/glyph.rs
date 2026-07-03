@@ -44,6 +44,7 @@ pub static GLYPHS: &[Glyph] = &[
     Glyph { id: 11, code: "MODEL_BLEND", title: "Chorus of Oracles", class: GlyphClass::Model },
     Glyph { id: 12, code: "MODEL_DISTILL", title: "Crucible of Insight", class: GlyphClass::Model },
     Glyph { id: 13, code: "MODEL_ERROR", title: "Oracle Fracture", class: GlyphClass::Model },
+    Glyph { id: 14, code: "MODEL_EVAL", title: "Oracle Reckoning", class: GlyphClass::Model },
 
     // Planning
     Glyph { id: 20, code: "PLAN_CHAIN", title: "Lattice of Intent", class: GlyphClass::Planning },
