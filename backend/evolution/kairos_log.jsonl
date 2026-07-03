@@ -1,3 +1,1 @@
 {"id": 1, "proposal": "\u26a0 All inference backends offline. GH05T3 running in degraded mode.", "verdict": "REVISE", "score": 0.1, "timestamp": 1777666134.1594236, "is_elite": false}
-{"id": 1, "proposal": "\u26a0 All inference backends offline. GH05T3 running in degraded mode.", "verdict": "REVISE", "score": 0.1, "timestamp": 1781969651.9584181, "is_elite": false, "sentinel_viability": 1000.0, "entropy_drift": 0.0, "agent_id": "omega"}
-{"id":1,"proposal":"test proposal","verdict":"PASS","score":0.95,"timestamp":1782533005.4462614,"is_elite":true,"sentinel_viability":0.0,"entropy_drift":0.0,"agent_id":"TEST"}

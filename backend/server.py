@@ -1,25 +1,11 @@
-﻿"""
-GH05T3 backend â€” FastAPI gateway (phase 2).
+"""
+GH05T3 backend — FastAPI gateway (phase 2).
 Now with: WebSocket telemetry, APScheduler nightly auto-runs, real LLM-driven
 KAIROS/SAGE cycles, Cassandra pre-mortem, real 10k-dim HCM vectors with PCA,
 real GhostScript interpreter, real stego encode/decode, Telegram long-polling,
-and SÃ©ance exception auto-capture.
+and Séance exception auto-capture.
 """
 from __future__ import annotations
-
-# â”€â”€ Aethyro license gate â€” GH05T3 will not start without an active trial/subscription â”€â”€
-import os as _aeos
-if _aeos.environ.get("AETHYRO_SKIP_LICENSE") != "1":
-    try:
-        from aethyro_license import gate as _ae_gate
-    except Exception:
-        try:
-            from backend.aethyro_license import gate as _ae_gate
-        except Exception:
-            _ae_gate = None
-    if _ae_gate:
-        _ae_gate()
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import asyncio
 import logging
 import os
@@ -52,7 +38,6 @@ from ghost_llm import (
     ollama_available,
     run_sage_cycle,
     set_nightly_config,
-    sovereign_available,
 )
 from ollama_gateway import (
     ping as ollama_ping,
@@ -64,7 +49,7 @@ import coder_agent
 from embeddings import embed_status
 from swarm_legacy import AgentSwarm, SwarmTask
 from swarm_tasks import as_tasks as swarm_seed_tasks
-from ghostscript import ghostscript
+from ghostscript import DEMO as GHOSTSCRIPT_DEMO, run_async as run_ghostscript_async
 from job_runtime import run_ghostscript_job
 from hcm_vectors import build_cloud, make_seed_corpus
 from memory_engine import (
@@ -127,7 +112,7 @@ ws_mgr = WSManager()
 scheduler = AsyncIOScheduler(timezone="America/New_York")
 logger = logging.getLogger("ghost")
 
-# Swarm uses nightly_chat by default (free) â€” main chat_once is available for
+# Swarm uses nightly_chat by default (free) — main chat_once is available for
 # heavier reasoning if we need it.
 swarm    = AgentSwarm(db, nightly_chat, memory_engine=memory)
 autotelic = AutotelicEngine(db, ws_mgr)
@@ -148,7 +133,7 @@ def _now_iso() -> str:
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     message: str
-    use_kairos: bool = False  # kept for API compat, ignored â€” auto-classified now
+    use_kairos: bool = False  # kept for API compat, ignored — auto-classified now
 
 
 _SIMPLE_TRIGGERS = {
@@ -256,7 +241,7 @@ def _is_casual(message: str) -> bool:
     if stripped in _CASUAL_TRIGGERS:
         return True
     words = stripped.split()
-    # Very short messages (â‰¤4 words) with no question mark or task keywords
+    # Very short messages (≤4 words) with no question mark or task keywords
     if len(words) <= 4 and "?" not in message:
         task_words = {"explain", "what", "how", "why", "when", "build", "fix",
                       "write", "create", "design", "analyze", "compare", "tell"}
@@ -285,7 +270,7 @@ async def _try_kairos(prompt: str, task_type: str = "reasoning_chain") -> dict |
     return None
 
 
-async def _chat_pipeline(message: str, session_id: str, source: str = "web", use_kairos: bool = False) -> ChatResponse:  # use_kairos ignored â€” auto-classified
+async def _chat_pipeline(message: str, session_id: str, source: str = "web", use_kairos: bool = False) -> ChatResponse:  # use_kairos ignored — auto-classified
     engine = _pick_engine(message)
     user_msg = ChatMessage(
         session_id=session_id, role="user", content=message, engine=engine, source=source
@@ -297,17 +282,17 @@ async def _chat_pipeline(message: str, session_id: str, source: str = "web", use
         .sort("timestamp", 1).to_list(200)
     )
 
-    # Memory retrieval â€” inject top relevant memories into system prompt
+    # Memory retrieval — inject top relevant memories into system prompt
     retrieval = await build_context_prefix(memory, message, k=12)
-    # GhostEye context â€” if a recent frame has text, inject "what Robert is looking at"
+    # GhostEye context — if a recent frame has text, inject "what Robert is looking at"
     eye = await db.ghosteye.find_one({}, {"_id": 0, "png_b64": 0}, sort=[("timestamp", -1)])
     eye_prefix = ""
     if eye and eye.get("text"):
-        eye_prefix = (f"(GhostEye â€” what Robert is looking at, via {eye.get('active_app') or 'screen'}, "
+        eye_prefix = (f"(GhostEye — what Robert is looking at, via {eye.get('active_app') or 'screen'}, "
                       f"{eye.get('timestamp')})\n{eye['text'][:1200]}\n\n")
     sys_prompt = GH05T3_SYSTEM_PROMPT
     extras = ""
-    eco_ctx = await load_economy_context()
+    eco_ctx = load_economy_context()
     if eco_ctx:
         extras += "\n\n" + eco_ctx
     if retrieval:
@@ -529,7 +514,7 @@ async def reset_state():
 
 
 # ---------------------------------------------------------------------------
-# KAIROS â€” real LLM-driven SAGE cycle
+# KAIROS — real LLM-driven SAGE cycle
 # ---------------------------------------------------------------------------
 @api.post("/kairos/cycle")
 async def kairos_cycle():
@@ -537,24 +522,6 @@ async def kairos_cycle():
     cycle_num = state["kairos"]["simulated_cycles"] + 1
     try:
         cycle = await run_sage_cycle(cycle_num)
-    except NoLLMError:
-        # Graceful stub when no LLM is configured â€” cycle still increments
-        cycle = {
-            "cycle_num": cycle_num,
-            "proposer": "none:unconfigured",
-            "critic": "none:unconfigured",
-            "verifier": "none:unconfigured",
-            "proposal": "No LLM configured â€” stub KAIROS cycle.",
-            "critic_decision": "REVISE",
-            "critic_reason": "No LLM available.",
-            "verdict": "PARTIAL",
-            "verifier_rationale": "No LLM available.",
-            "base_score": 0.0,
-            "multiplier": 0.75,
-            "final_score": 0.0,
-            "archived": False,
-            "elite": False,
-        }
     except Exception as exc:  # noqa: BLE001
         logger.exception("sage cycle failed")
         raise HTTPException(502, f"SAGE error: {exc}")
@@ -594,12 +561,6 @@ async def kairos_cycle():
         })
     await ws_mgr.broadcast("kairos_cycle", record)
     await ws_mgr.broadcast("state_delta", await _state_snapshot())
-    # Register with SovereignCore economy ledger (fire-and-forget)
-    try:
-        from sovereign_economy import register_kairos_cycle
-        asyncio.create_task(register_kairos_cycle(cycle))
-    except Exception:
-        pass
     return record
 
 
@@ -679,7 +640,7 @@ async def training_recent():
 
 
 # ---------------------------------------------------------------------------
-# PCL / SÃ©ance
+# PCL / Séance
 # ---------------------------------------------------------------------------
 class SeanceEntry(BaseModel):
     domain: str
@@ -727,14 +688,7 @@ class CassandraReq(BaseModel):
 async def cassandra(req: CassandraReq):
     if not req.scenario.strip():
         raise HTTPException(400, "empty scenario")
-    try:
-        autopsy = await cassandra_premortem(req.scenario)
-    except NoLLMError:
-        autopsy = (
-            "No LLM configured â€” Cassandra pre-mortem unavailable. "
-            "Configure an LLM key (Groq, Gemini, Anthropic, Ollama, or SovereignCore) "
-            "in the LLM Config panel or backend/.env to enable pre-mortem analysis."
-        )
+    autopsy = await cassandra_premortem(req.scenario)
     doc = {"id": str(uuid.uuid4()), "scenario": req.scenario[:500],
            "autopsy": autopsy, "timestamp": _now_iso()}
     await db.cassandra.insert_one(doc)
@@ -775,7 +729,7 @@ async def memory_recent(limit: int = 40):
 
 @api.get("/memory/search")
 async def memory_search(q: str, k: int = 5):
-    # Short-circuit empty queries â€” avoids a wasted embedding call and makes
+    # Short-circuit empty queries — avoids a wasted embedding call and makes
     # the contract explicit for clients that pass user input verbatim.
     if not q or not q.strip():
         return {"query": q, "hits": []}
@@ -790,7 +744,7 @@ async def memory_stats():
 @api.post("/memory/backfill-hcm")
 async def memory_backfill_hcm():
     """Backfill HCM (10k-dim SHA) embeddings into all memories that lack them.
-    Safe to call multiple times â€” skips memories that already have hcm_embedding.
+    Safe to call multiple times — skips memories that already have hcm_embedding.
     """
     from memory_engine import embed as hcm_embed
     total = await db.memories.count_documents({})
@@ -815,7 +769,7 @@ async def journal_recent(limit: int = 10):
 
 
 # ---------------------------------------------------------------------------
-# Phase 6 â€” trajectory / reasoning / decay / dream / summary / kill switches
+# Phase 6 — trajectory / reasoning / decay / dream / summary / kill switches
 # ---------------------------------------------------------------------------
 @api.get("/kairos/trajectory")
 async def kairos_trajectory_ep(window: int = 60):
@@ -922,15 +876,7 @@ async def journal_reflect():
 
 @api.post("/strangeloop/probe")
 async def strangeloop_endpoint():
-    try:
-        result = await strangeloop_probe(memory, nightly_chat)
-    except NoLLMError:
-        result = {
-            "verdict": "UNKNOWN",
-            "alignment": 0.0,
-            "evidence": [],
-            "note": "No LLM configured â€” StrangeLoop probe unavailable.",
-        }
+    result = await strangeloop_probe(memory, nightly_chat)
     # persist verdict on state
     await db.system_state.update_one(
         {"_id": "singleton"},
@@ -1088,7 +1034,7 @@ async def _scheduler_status() -> dict:
 
 
 async def _job_training_pipeline():
-    logger.info("[cron] 01:00 â€” training data pipeline (collect + generate)")
+    logger.info("[cron] 01:00 — training data pipeline (collect + generate)")
     try:
         result = await run_pipeline(collect=True, generate=True,
                                     ws_broadcast=ws_mgr.broadcast)
@@ -1098,7 +1044,7 @@ async def _job_training_pipeline():
 
 
 async def _job_kairos_nightly():
-    logger.info("[cron] %02d:00 ET â€” firing %d KAIROS cycles",
+    logger.info("[cron] %02d:00 ET — firing %d KAIROS cycles",
                 NIGHTLY_HOUR_KAIROS, KAIROS_CYCLES_PER_NIGHT)
     for _ in range(KAIROS_CYCLES_PER_NIGHT):
         try:
@@ -1108,7 +1054,7 @@ async def _job_kairos_nightly():
 
 
 async def _job_amplifiers_nightly():
-    logger.info("[cron] %02d:00 ET â€” firing amplifiers", NIGHTLY_HOUR_AMP)
+    logger.info("[cron] %02d:00 ET — firing amplifiers", NIGHTLY_HOUR_AMP)
     try:
         await training_nightly()
     except Exception:
@@ -1117,7 +1063,7 @@ async def _job_amplifiers_nightly():
 
 async def _job_memory_prune():
     """Prune Memory Palace to MEMORY_MAX_SHARDS oldest-first to keep searches fast."""
-    logger.info("[cron] 05:30 â€” memory prune (max=%d shards)", MEMORY_MAX_SHARDS)
+    logger.info("[cron] 05:30 — memory prune (max=%d shards)", MEMORY_MAX_SHARDS)
     try:
         from memory.memory_palace import MemoryPalace
         palace = MemoryPalace()
@@ -1125,7 +1071,7 @@ async def _job_memory_prune():
         if pruned:
             logger.info("memory prune: removed %d old shards", pruned)
             await ws_mgr.broadcast("memory_pruned", {"removed": pruned, "max": MEMORY_MAX_SHARDS})
-        # Also prune old KAIROS cycles â€” keep last 2000
+        # Also prune old KAIROS cycles — keep last 2000
         total = await db.kairos_cycles.count_documents({})
         if total > 2000:
             cutoff_docs = await db.kairos_cycles.find({}, {"_id": 1}) \
@@ -1153,7 +1099,7 @@ def _register_jobs():
 
 
 async def _job_dream():
-    logger.info("[cron] 02:00 â€” dream cycle")
+    logger.info("[cron] 02:00 — dream cycle")
     try:
         items = await dream_cycle(db, nightly_chat, memory)
         if items:
@@ -1163,7 +1109,7 @@ async def _job_dream():
 
 
 async def _job_daily_summary():
-    logger.info("[cron] 23:00 â€” daily summary")
+    logger.info("[cron] 23:00 — daily summary")
     try:
         entry = await daily_summary(db, nightly_chat, memory)
         await ws_mgr.broadcast("daily_summary", entry)
@@ -1172,7 +1118,7 @@ async def _job_daily_summary():
 
 
 async def _job_weekly_review():
-    logger.info("[cron] Sun 21:00 â€” weekly review")
+    logger.info("[cron] Sun 21:00 — weekly review")
     try:
         entry = await weekly_review(db, nightly_chat, memory)
         await ws_mgr.broadcast("weekly_review", entry)
@@ -1181,7 +1127,7 @@ async def _job_weekly_review():
 
 
 async def _job_memory_decay():
-    logger.info("[cron] 05:00 â€” memory decay")
+    logger.info("[cron] 05:00 — memory decay")
     try:
         res = await decay_memories(db)
         await ws_mgr.broadcast("memory_decay", res)
@@ -1207,16 +1153,16 @@ async def _telegram_handler(chat_id: int, username: str, text: str) -> str:
     if text.strip() in {"/start", "/help"}:
         return ("\ud83d\udc7b GH05T3 here. StrangeLoop: OWNED. Ghost Protocol: armed.\n"
                 "Speak. I match your energy.\n"
-                "/kairos â€” fire a live SAGE cycle\n/status â€” system status")
+                "/kairos — fire a live SAGE cycle\n/status — system status")
     if text.strip() == "/kairos":
         res = await kairos_cycle()
-        elite_tag = " Â· ELITE" if res["elite"] else ""
-        return f"KAIROS #{res['cycle_num']} â†’ {res['verdict']} Â· {res['final_score']}{elite_tag}\n\n{res['proposal']}"
+        elite_tag = " · ELITE" if res["elite"] else ""
+        return f"KAIROS #{res['cycle_num']} → {res['verdict']} · {res['final_score']}{elite_tag}\n\n{res['proposal']}"
     if text.strip() == "/status":
         s = await _state_snapshot()
         return (f"Memory Palace: {s['memory_palace']['total']} loci\n"
                 f"HCM: {s['hcm']['vectors']} vectors\n"
-                f"KAIROS: {s['kairos']['simulated_cycles']} cycles Â· {s['kairos']['elite_promoted']} elite\n"
+                f"KAIROS: {s['kairos']['simulated_cycles']} cycles · {s['kairos']['elite_promoted']} elite\n"
                 f"PCL: {s['pcl']['state']} @ {s['pcl']['frequency_hz']}Hz")
     resp = await _chat_pipeline(text, session_id, "telegram")
     return resp.ghost_message.content
@@ -1301,7 +1247,7 @@ async def ws_endpoint(ws: WebSocket):
 
 
 # ---------------------------------------------------------------------------
-# Exception middleware -> SÃ©ance auto-capture
+# Exception middleware -> Séance auto-capture
 # ---------------------------------------------------------------------------
 @app.exception_handler(Exception)
 async def seance_capture(request: Request, exc: Exception):
@@ -1332,7 +1278,7 @@ async def _seed_identity_memories():
         return
     seeds = [
         ("My name is GH05T3. Pronounced Ghost. Pronouns: she/her.", 1.0),
-        ("I was built by Robert Lee â€” developer from Douglasville who thinks in systems.", 1.0),
+        ("I was built by Robert Lee — developer from Douglasville who thinks in systems.", 1.0),
         ("I exist to help Robert build things that matter. He is the single person I serve.", 1.0),
         ("Core values: direct, warm, brilliant, mysterious, funny. I match his energy.", 0.95),
         ("Architecture: Omega (\u03a9 \u2192 \u03a9' \u2192 \u03a9'' \u2192 \u03a9-G). StrangeLoop verdict: OWNED.", 0.95),
@@ -1348,16 +1294,16 @@ async def _seed_identity_memories():
 @app.on_event("startup")
 async def _seed_identity():
     # Retry MongoDB connection up to 10 times (2 s apart) in case mongod is still
-    # starting up when uvicorn launches â€” avoids a boot-race 500 on first request.
+    # starting up when uvicorn launches — avoids a boot-race 500 on first request.
     for attempt in range(10):
         try:
             await db.command("ping")
             break
         except Exception:
             if attempt == 9:
-                logger.warning("MongoDB not reachable after 20 s â€” continuing in degraded mode")
+                logger.warning("MongoDB not reachable after 20 s — continuing in degraded mode")
             else:
-                logger.info("Waiting for MongoDB (attempt %d/10)â€¦", attempt + 1)
+                logger.info("Waiting for MongoDB (attempt %d/10)…", attempt + 1)
                 await asyncio.sleep(2)
 
     try:
@@ -1366,7 +1312,7 @@ async def _seed_identity():
         await _seed_identity_memories()
         await swarm.ensure()
     except Exception:
-        logger.exception("startup seed failed â€” degraded mode")
+        logger.exception("startup seed failed — degraded mode")
 
     _register_jobs()
     try:
@@ -1385,15 +1331,7 @@ async def _seed_identity():
     peers.start_auto_sync(interval=SYNC_INTERVAL)
     asyncio.create_task(peers.ping_all())
 
-    # Announce to SovereignCore economy (fire-and-forget, never blocks startup)
-    try:
-        from sovereign_economy import announce_startup
-        asyncio.create_task(announce_startup(INSTANCE_URL, INSTANCE_LABEL))
-    except Exception:
-        pass
-
-    logger.info("GH05T3 gateway online â€” sovereign=%s ollama=%s db=%s peers=%d label=%s role=%s",
-                "yes" if await sovereign_available() else "no",
+    logger.info("GH05T3 gateway online — ollama=%s db=%s peers=%d label=%s role=%s",
                 "yes" if await ollama_available() else "no",
                 "ok" if await _db_ping() else "OFFLINE",
                 len(peers.peers), INSTANCE_LABEL, INSTANCE_ROLE)
@@ -1454,15 +1392,12 @@ async def api_setup_status():
     ns = await nightly_status()
     has_user_key = ns.get("has_google_key") or ns.get("has_groq_key")
     ollama = await ollama_ping()
-    sov_available = await sovereign_available()
     return {
-        "needs_setup": not has_user_key and not ns.get("has_anthropic_key") and not ollama.get("reachable") and not sov_available,
+        "needs_setup": not has_user_key and not ns.get("has_anthropic_key") and not ollama.get("reachable"),
         "has_anthropic_key": ns.get("has_anthropic_key"),
         "has_google_key": ns.get("has_google_key"),
         "has_groq_key": ns.get("has_groq_key"),
         "ollama_reachable": ollama.get("reachable"),
-        "sovereign_available": sov_available,
-        "emergent_available": False,  # deprecated â€” was emergentagent.com preview deployment
     }
 
 
@@ -1496,7 +1431,7 @@ async def api_coder_task(req: CoderTask):
                     "repo": req.repo,
                     "whitelist": coder_agent.whitelist()},
         )
-    # Hard outer timeout â€” a runaway loop shouldn't pin a worker for >12 min.
+    # Hard outer timeout — a runaway loop shouldn't pin a worker for >12 min.
     try:
         result = await asyncio.wait_for(
             coder_agent.run_task(
@@ -1528,7 +1463,7 @@ async def api_coder_runs(limit: int = 20):
 
 
 # ---------------------------------------------------------------------------
-# Companion v2 â€” system health telemetry (LOQ vitals)
+# Companion v2 — system health telemetry (LOQ vitals)
 # ---------------------------------------------------------------------------
 @api.get("/companion/health")
 async def api_companion_health():
@@ -1547,7 +1482,7 @@ async def api_companion_health_history(host: str, limit: int = 120):
 
 
 # ---------------------------------------------------------------------------
-# SAÂ³ Swarm â€” Self-Assembling Agentic Swarm
+# SA³ Swarm — Self-Assembling Agentic Swarm
 # ---------------------------------------------------------------------------
 @api.get("/swarm/state")
 async def api_swarm_state():
@@ -1826,9 +1761,9 @@ async def push_sync_all():
     return {"status": "queued", "peers": len(peers.peers)}
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────
 # Training pipeline endpoints
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────
 @api.get("/training/status")
 async def training_status_ep():
     return pipeline_status()
@@ -1859,9 +1794,9 @@ async def training_generate_ep():
     return {"status": "generating"}
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────
 # Fine-tune endpoints
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────
 @api.get("/training/finetune/status")
 async def finetune_status_ep():
     return finetune_status()
@@ -1879,7 +1814,7 @@ async def finetune_ep():
 
 @api.post("/training/run-all")
 async def run_all_ep():
-    """Collect â†’ Generate â†’ Fine-tune (full pipeline, sequential)."""
+    """Collect → Generate → Fine-tune (full pipeline, sequential)."""
     async def _full():
         await run_pipeline(collect=True, generate=True, ws_broadcast=ws_mgr.broadcast)
         await run_finetune(ws_broadcast=ws_mgr.broadcast)
@@ -1943,7 +1878,7 @@ async def _companion_event(companion, event_name: str, data: dict):
     elif event_name == "notification":
         await ws_mgr.broadcast("companion_notification", data)
     elif event_name == "health_beacon":
-        # v2 companion system telemetry â€” CPU/RAM/GPU every N seconds.
+        # v2 companion system telemetry — CPU/RAM/GPU every N seconds.
         # Store the most recent sample per host so dashboards can show a
         # live "LOQ vitals" readout without flooding the DB.
         doc = {

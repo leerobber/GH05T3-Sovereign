@@ -106,7 +106,7 @@ class MemoryEngine:
         return _expose(doc)
 
     async def list_recent(self, limit: int = 40) -> list[dict]:
-        rows = await self.db.memories.find({}, {"embedding": 0, "hcm_embedding": 0}) \
+        rows = await self.db.memories.find({}, {"embedding": 0}) \
             .sort("created_at", -1).to_list(limit)
         for r in rows:
             r["id"] = r.pop("_id")

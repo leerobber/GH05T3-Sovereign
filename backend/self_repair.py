@@ -7,9 +7,9 @@ Monitors the backend for known failure patterns and fixes them autonomously:
   litellm import / budget error    Remove litellm from venv + sys.path
   gateway_v3 process on port 8002  Kill it
   stale old-Python process on 8001 Kill it, reschedule clean start
-  Stale preview URL in config       Wipe it from DB + env
-  NoLLMError (all providers fail)   Force SovereignCore/Ollama, log & alert
-  nightly_chat total failure        Fall through to SovereignCore/Ollama directly
+  Emergent host URL in config      Wipe it from DB + env
+  NoLLMError (all providers fail)  Force Ollama, log & alert
+  nightly_chat total failure       Fall through to Ollama directly
   ────────────────────────────────────────────────────────────────────
 
 Runs as an APScheduler job every 5 minutes.
@@ -34,7 +34,7 @@ _REPO    = _BACKEND.parent.resolve()
 # ── known bad patterns ────────────────────────────────────────────────────────
 
 _BAD_IMPORTS   = ["litellm", "emergentintegrations"]
-_BAD_URLS      = ["emergent.host", "emergentintegrations", "tatorot-dashboard"]  # preview deployment URLs
+_BAD_URLS      = ["emergent.host", "emergentintegrations", "tatorot-dashboard"]
 _BAD_PORTS     = [8002]   # gateway_v3 port — should never be in use by us
 _PROTECTED_PORT = 8001
 
@@ -119,8 +119,8 @@ def _check_wrong_python_on_8001() -> list[str]:
     return fixed
 
 
-async def _purge_stale_urls_from_db(db) -> list[str]:
-    """Remove any stale preview-deployment URLs or keys from MongoDB config."""
+async def _purge_emergent_from_db(db) -> list[str]:
+    """Remove any Emergent URLs or keys from MongoDB config."""
     fixed = []
     try:
         # Check llm_config for emergent URLs
@@ -130,8 +130,8 @@ async def _purge_stale_urls_from_db(db) -> list[str]:
                     await db.llm_config.update_one(
                         {"_id": doc["_id"]}, {"$unset": {k: ""}}
                     )
-                    LOG.warning("self_repair: purged stale preview URL from llm_config.%s", k)
-                    fixed.append(f"purged stale preview URL from llm_config.{k}")
+                    LOG.warning("self_repair: purged emergent ref from llm_config.%s", k)
+                    fixed.append(f"purged emergent url from llm_config.{k}")
 
         # Wipe EMERGENT_LLM_KEY from env
         if os.environ.get("EMERGENT_LLM_KEY"):
@@ -154,17 +154,9 @@ async def _verify_llm_chain() -> list[str]:
     try:
         from ghost_llm import ollama_available, _anthropic_key, _groq_key
 
-        # SovereignCore gateway reachable? (preferred local GPU cluster)
-        try:
-            from sovereign_economy import sovereign_available
-            if not await sovereign_available():
-                issues.append("SovereignCore gateway unreachable — start sovereign-core for GPU inference")
-        except Exception:
-            pass
-
         # Anthropic key present?
         if not _anthropic_key():
-            issues.append("ANTHROPIC_API_KEY missing — Groq/Ollama/SovereignCore will handle load")
+            issues.append("ANTHROPIC_API_KEY missing — Groq/Ollama will handle load")
 
         # Groq key?
         if not _groq_key():
@@ -205,7 +197,7 @@ async def check(db=None) -> dict:
 
     # 4. Emergent refs in DB
     if db is not None:
-        actions += await _purge_stale_urls_from_db(db)
+        actions += await _purge_emergent_from_db(db)
 
     # 5. LLM chain health
     issues += await _verify_llm_chain()
@@ -247,35 +239,23 @@ async def get_repair_log(db, limit: int = 20) -> list[dict]:
 
 # ── LLM error handler — called when chat_once raises ─────────────────────────
 
-def is_stale_provider_error(exc: Exception) -> bool:
-    """Detect errors from removed/stale LLM providers (litellm, old preview deployment)."""
+def is_emergent_error(exc: Exception) -> bool:
     msg = str(exc).lower()
     return any(p in msg for p in [
-        "budget has been exceeded", "emergentintegrations", "litellm",
+        "budget has been exceeded", "emergent", "litellm",
         "openaiexception", "current cost", "max budget",
-        "tatorot-dashboard",
     ])
 
 
 async def handle_llm_error(exc: Exception, db=None) -> str:
     """Called when an LLM error occurs. Repairs what it can, returns safe message."""
-    if is_stale_provider_error(exc):
-        LOG.error("self_repair: caught stale-provider/litellm error — purging")
+    if is_emergent_error(exc):
+        LOG.error("self_repair: caught Emergent/litellm budget error — purging")
         _purge_bad_imports()
         _kill_bad_ports()
         if db:
-            await _purge_stale_urls_from_db(db)
-        # Force SovereignCore or Ollama as immediate fallback
-        try:
-            from sovereign_economy import sovereign_chat, sovereign_available
-            if await sovereign_available():
-                text = await sovereign_chat(
-                    "You are GH05T3.",
-                    "Respond: I caught a billing error and switched to SovereignCore local GPU. I'm back online."
-                )
-                return text
-        except Exception:
-            pass
+            await _purge_emergent_from_db(db)
+        # Force Ollama as immediate fallback
         try:
             from ghost_llm import _call_ollama_safe
             text, tag = await _call_ollama_safe(
@@ -285,9 +265,5 @@ async def handle_llm_error(exc: Exception, db=None) -> str:
             return text
         except Exception:
             pass
-        return "I caught a billing/quota error and repaired it. Switched to SovereignCore/Ollama. Try again."
+        return "I caught a billing/quota error and repaired it. Switched to local Ollama. Try again."
     return f"LLM error: {exc}"
-
-
-# Backward-compat alias
-is_emergent_error = is_stale_provider_error

@@ -5,6 +5,9 @@
 *credential*
 *secret*
 
+# Databases -- may carry embedded runtime/secret data
+*.db
+
 # Python
 __pycache__/
 *.pyc
@@ -20,6 +23,13 @@ models/
 *.bin
 *.gguf
 
+# Training data / checkpoints
+backend/training/checkpoints/
+backend/data/
+*.safetensors
+*.jsonl
+*.pt
+
 # Build artifacts
 *.log
 *.tmp
@@ -27,13 +37,3 @@ models/
 # IDE
 .vscode/
 .idea/
-
-# Training data/checkpoints — large binaries, don't belong in git
-backend/training/checkpoints/
-backend/data/
-*.safetensors
-*.jsonl
-*.pt
-
-# Databases — may carry embedded runtime/secret data
-*.db

@@ -30,7 +30,6 @@ import httpx
 
 from swarm.bus import SwarmBus, SwarmMessage, MsgType, SwarmAgent
 from evolution.kairos import KAIROSCycle
-from integrations.fallback_llm import FallbackLLMClient, detect_credit_exhaustion, FallbackUsage
 
 log = logging.getLogger("gh0st3.claude")
 
@@ -77,31 +76,20 @@ class ClaudeUsage:
 # ─────────────────────────────────────────────
 
 class ClaudeClient:
-    """Direct async Claude API client with auto-fallback to free local LLMs when credits exhausted."""
+    """Direct async Claude API client. No SDK dependency."""
 
     def __init__(self, api_key: str = None):
         import os
         self._key    = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self._client = httpx.AsyncClient(timeout=60.0)
         self._bus    = SwarmBus.instance()
-        self._fallback = FallbackLLMClient()
-        self._fallback.set_bus(self._bus)
 
     async def call(self, system: str, user: str, max_tokens: int = 1024,
                    role_label: str = "claude", task_label: str = "") -> tuple[str, ClaudeUsage]:
         if os.environ.get("ALLOW_PAID_LLM", "").strip().lower() not in _TRUE_VALUES:
             return "[Claude disabled: set ALLOW_PAID_LLM=1 to permit paid Anthropic calls]", ClaudeUsage()
         if not self._key:
-            log.warning("[Claude] API key not configured — using free fallback")
-            fallback_content, fallback_usage = await self._fallback.call(
-                system=system, user=user, max_tokens=max_tokens,
-                role_label=role_label, task_label=task_label
-            )
-            return fallback_content, ClaudeUsage(
-                role=role_label, input_tokens=fallback_usage.input_tokens,
-                output_tokens=fallback_usage.output_tokens,
-                latency_ms=fallback_usage.latency_ms, task=task_label
-            )
+            return "[Claude API key not configured — set ANTHROPIC_API_KEY]", ClaudeUsage()
 
         t0 = time.perf_counter()
         payload = {
@@ -148,37 +136,11 @@ class ClaudeClient:
             return content, u
 
         except Exception as e:
-            # Check if this is credit exhaustion
-            if await detect_credit_exhaustion(e):
-                log.warning(f"[Claude] API credits exhausted or rate limited: {e}")
-                log.info("[Claude] Routing to free local LLM fallback...")
-
-                # Emit fallback event to bus
-                await self._bus.emit(
-                    src="CLAUDE-FALLBACK",
-                    content=f"Credits exhausted — routing to free local LLM for {role_label}",
-                    channel="#claude",
-                    msg_type=MsgType.CLAUDE,
-                    fallback_active=True,
-                )
-
-                # Use fallback
-                fallback_content, fallback_usage = await self._fallback.call(
-                    system=system, user=user, max_tokens=max_tokens,
-                    role_label=role_label, task_label=task_label
-                )
-                return fallback_content, ClaudeUsage(
-                    role=role_label, input_tokens=fallback_usage.input_tokens,
-                    output_tokens=fallback_usage.output_tokens,
-                    latency_ms=fallback_usage.latency_ms, task=task_label
-                )
-            else:
-                log.error(f"[Claude] API call failed: {e}")
-                return f"[Claude error: {e}]", ClaudeUsage(role=role_label, task=task_label)
+            log.error(f"[Claude] API call failed: {e}")
+            return f"[Claude error: {e}]", ClaudeUsage(role=role_label, task=task_label)
 
     async def close(self):
         await self._client.aclose()
-        await self._fallback.close()
 
 
 # ─────────────────────────────────────────────

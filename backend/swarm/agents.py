@@ -30,13 +30,6 @@ import httpx
 from swarm.bus import SwarmAgent, SwarmMessage, MsgType, SwarmBus
 from core.config import BACKENDS, OLLAMA_BASE, SOVEREIGN_MODELS
 
-# Marketplace integration — agents claim jobs from the persistent queue
-try:
-    from agent_marketplace import JobQueue, WorkerConfig, Job, ingest_cve_feed
-    _MARKETPLACE = True
-except ImportError:
-    _MARKETPLACE = False
-
 log = logging.getLogger("gh0st3.swarm.agents")
 
 # ── Sovereign model manifest injected into NEXUS and ORACLE ──────────────────
@@ -100,28 +93,6 @@ class OracleAgent(SwarmAgent):
             return
         if "research" in msg.content.lower() or msg.dst == self.agent_id:
             await self.handle_research(msg)
-
-    async def claim_marketplace_jobs(self):
-        """Pull pending research/github jobs from the marketplace queue."""
-        if not _MARKETPLACE:
-            return
-        q = JobQueue.instance()
-        while True:
-            job = await q.claim("ORACLE", ["research", "github"])
-            if not job:
-                await asyncio.sleep(5)
-                continue
-            await self.think(f"ORACLE claimed job={job.id}: {job.task[:60]}")
-            try:
-                result = await _ollama_generate(
-                    self._client, "oracle",
-                    f"Research task: {job.task}\nProvide a comprehensive, cited answer.",
-                    temperature=0.3,
-                )
-                await q.complete(job.id, result, "ORACLE")
-            except Exception as e:
-                log.error("[ORACLE] job=%s failed: %s", job.id, e)
-                await q.fail(job.id, str(e), "ORACLE")
 
     async def handle_research(self, task_msg: SwarmMessage):
         query = task_msg.content
@@ -204,28 +175,6 @@ class ForgeAgent(SwarmAgent):
         await self.think("Delegating to CODEX for review...")
         await self.task("CODEX", f"Review this code:\n\n{code}")
 
-    async def claim_marketplace_jobs(self):
-        """Pull code generation jobs from the marketplace."""
-        if not _MARKETPLACE:
-            return
-        q = JobQueue.instance()
-        while True:
-            job = await q.claim("FORGE", ["code_generation", "security_scan"])
-            if not job:
-                await asyncio.sleep(5)
-                continue
-            await self.think(f"FORGE claimed job={job.id}: {job.task[:60]}")
-            try:
-                result = await _ollama_generate(
-                    self._client, "forge",
-                    f"Write production-ready code for:\n{job.task}",
-                    temperature=0.25, max_tokens=1200,
-                )
-                await q.complete(job.id, result, "FORGE")
-            except Exception as e:
-                log.error("[FORGE] job=%s failed: %s", job.id, e)
-                await q.fail(job.id, str(e), "FORGE")
-
     async def close(self):
         await self._client.aclose()
 
@@ -275,29 +224,6 @@ class CodexAgent(SwarmAgent):
             task_id=task_msg.metadata.get("task_id"),
         )
         await self.think(f"Code review complete: {review[:100]}...")
-
-    async def claim_marketplace_jobs(self):
-        """Pull code review jobs from the marketplace."""
-        if not _MARKETPLACE:
-            return
-        q = JobQueue.instance()
-        while True:
-            job = await q.claim("CODEX", ["code_review", "github"])
-            if not job:
-                await asyncio.sleep(5)
-                continue
-            await self.think(f"CODEX claimed job={job.id}: {job.task[:60]}")
-            try:
-                result = await _ollama_generate(
-                    self._client, "codex",
-                    f"Review the following code or PR description for bugs, security issues, "
-                    f"and improvement opportunities:\n\n{job.task}",
-                    temperature=0.1, max_tokens=600,
-                )
-                await q.complete(job.id, result, "CODEX")
-            except Exception as e:
-                log.error("[CODEX] job=%s failed: %s", job.id, e)
-                await q.fail(job.id, str(e), "CODEX")
 
     async def close(self):
         await self._client.aclose()
@@ -406,106 +332,6 @@ class SentinelAgent(SwarmAgent):
                 pass
         else:
             await self.think(f"SENTINEL: FORGE output clear — no security risks")
-
-    async def claim_marketplace_jobs(self):
-        """Pull security scan / CVE jobs from the marketplace."""
-        if not _MARKETPLACE:
-            return
-        q   = JobQueue.instance()
-        cli = httpx.AsyncClient(timeout=30.0)
-        try:
-            while True:
-                job = await q.claim("SENTINEL", ["security_scan", "cve", "critical", "high"])
-                if not job:
-                    await asyncio.sleep(5)
-                    continue
-                await self.think(f"SENTINEL claimed job={job.id}: {job.task[:60]}")
-                try:
-                    prompt = (
-                        f"Security analysis task:\n{job.task}\n\n"
-                        f"Provide: (1) risk assessment, (2) whether GH05T3 stack is affected, "
-                        f"(3) specific mitigations, (4) urgency level (CRITICAL/HIGH/MEDIUM/LOW)."
-                    )
-                    result = await _ollama_generate(cli, "sentinel", prompt,
-                                                    temperature=0.1, max_tokens=600)
-                    await q.complete(job.id, result, "SENTINEL")
-                except Exception as e:
-                    log.error("[SENTINEL] job=%s failed: %s", job.id, e)
-                    await q.fail(job.id, str(e), "SENTINEL")
-        finally:
-            await cli.aclose()
-
-    # Python packages in the GH05T3 stack to monitor for CVEs
-    _MONITORED_PACKAGES = [
-        "fastapi", "pydantic", "uvicorn", "httpx", "requests",
-        "transformers", "torch", "aiofiles", "starlette", "websockets",
-    ]
-
-    async def fetch_cve_feed(self, limit: int = 10) -> list[dict]:
-        """Fetch recent CVEs from OSV.dev for GH05T3's Python dependencies.
-
-        Uses /v1/querybatch with real package names — the single /v1/query
-        endpoint requires a package name+ecosystem pair; sending only
-        {"ecosystem": "PyPI"} without a name returns a 400 error.
-        """
-        if not _MARKETPLACE:
-            return []
-        try:
-            import httpx as _httpx
-            queries = [
-                {"package": {"ecosystem": "PyPI", "name": pkg}}
-                for pkg in self._MONITORED_PACKAGES
-            ]
-            async with _httpx.AsyncClient(timeout=15) as c:
-                r = await c.post(
-                    "https://api.osv.dev/v1/querybatch",
-                    json={"queries": queries},
-                )
-                if r.status_code != 200:
-                    log.debug("OSV querybatch returned %d", r.status_code)
-                    return []
-
-                results    = r.json().get("results", [])
-                cve_records: list[dict] = []
-                seen_ids: set[str]      = set()
-
-                for batch_result in results:
-                    for v in batch_result.get("vulns", []):
-                        aliases = v.get("aliases", []) or [v.get("id", "")]
-                        cve_id  = next(
-                            (a for a in aliases if a.startswith("CVE-")),
-                            v.get("id", "UNKNOWN"),
-                        )
-                        if cve_id in seen_ids:
-                            continue
-                        seen_ids.add(cve_id)
-
-                        db_sev = v.get("database_specific", {}).get("severity", "")
-                        sev_list = v.get("severity", [])
-                        sev = (db_sev or
-                               (sev_list[0].get("score", "MEDIUM")
-                                if sev_list and isinstance(sev_list[0].get("score"), str)
-                                else "MEDIUM"))
-
-                        cve_records.append({
-                            "id":       cve_id,
-                            "summary":  v.get("summary", v.get("details", ""))[:300],
-                            "severity": sev if isinstance(sev, str) else "MEDIUM",
-                        })
-                        if len(cve_records) >= limit:
-                            break
-                    if len(cve_records) >= limit:
-                        break
-
-                if cve_records:
-                    jobs = await ingest_cve_feed(cve_records)
-                    await self.think(
-                        f"SENTINEL: ingested {len(jobs)} CVE jobs from OSV feed"
-                    )
-                return cve_records
-        except Exception as e:
-            log.debug("CVE feed fetch failed: %s", e)
-            return []
 
     @property
     def stats(self) -> dict:
@@ -677,105 +503,6 @@ class ChronicleAgent(SwarmAgent):
 
 
 # ─────────────────────────────────────────────
-# LEDGER AGENT — Diana Cross (CFO)
-# ─────────────────────────────────────────────
-
-class LedgerAgent(SwarmAgent):
-    """
-    Economy & billing intelligence agent.
-    Handles Stripe events, subscription management, revenue reporting.
-    Earns credits for every billing event processed.
-    """
-    ROLE        = "ledger"
-    DESCRIPTION = "Economy, billing & subscription management"
-    CHANNELS    = ["#broadcast"]
-
-    def __init__(self):
-        super().__init__("LEDGER")
-        self._client          = httpx.AsyncClient(timeout=20.0)
-        self._events_handled  = 0
-        self._revenue_tracked = 0.0
-
-    async def on_message(self, msg: SwarmMessage):
-        if msg.msg_type == MsgType.TASK and (
-            "billing" in msg.content.lower() or
-            "stripe"  in msg.content.lower() or
-            "subscription" in msg.content.lower() or
-            "revenue" in msg.content.lower() or
-            msg.dst == self.agent_id
-        ):
-            await self._handle_billing_task(msg)
-
-    async def _handle_billing_task(self, task_msg: SwarmMessage):
-        await self.think(f"LEDGER: Analyzing billing task: '{task_msg.content[:60]}'")
-
-        prompt = (
-            f"You are Diana Cross, CFO of Avery. "
-            f"Analyze this billing event and provide: "
-            f"(1) action required, (2) customer impact, (3) financial implication.\n\n"
-            f"Event: {task_msg.content}"
-        )
-        analysis = await _ollama_generate(self._client, "nexus", prompt, temperature=0.2, max_tokens=400)
-        self._events_handled += 1
-
-        await self.say(
-            content=analysis,
-            channel=f"#swarm/{task_msg.src}",
-            msg_type=MsgType.RESULT,
-            dst=task_msg.src,
-            task_id=task_msg.metadata.get("task_id"),
-        )
-
-        # Report to economy bridge
-        try:
-            from economy.ledger import credit as eco_credit
-            eco_credit("LEDGER", 15, f"billing event: {task_msg.content[:40]}", "marketplace")
-        except Exception:
-            pass
-
-    async def claim_marketplace_jobs(self):
-        """Pull billing/stripe jobs from the marketplace queue."""
-        if not _MARKETPLACE:
-            return
-        q = JobQueue.instance()
-        while True:
-            job = await q.claim("LEDGER", ["billing", "stripe", "ledger"])
-            if not job:
-                await asyncio.sleep(5)
-                continue
-            await self.think(f"LEDGER claimed job={job.id}: {job.task[:60]}")
-            try:
-                prompt = (
-                    f"As CFO Diana Cross, handle this billing event:\n{job.task}\n\n"
-                    f"State: action taken, customer status, and any follow-up needed."
-                )
-                result = await _ollama_generate(self._client, "nexus", prompt,
-                                                temperature=0.2, max_tokens=400)
-                self._events_handled += 1
-                await q.complete(job.id, result, "LEDGER")
-            except Exception as e:
-                log.error("[LEDGER] job=%s failed: %s", job.id, e)
-                await q.fail(job.id, str(e), "LEDGER")
-
-    def economy_report(self) -> dict:
-        """Quick economy snapshot from local ledger."""
-        try:
-            from economy.ledger import ledger_stats
-            return ledger_stats()
-        except Exception:
-            return {"status": "ledger unavailable"}
-
-    @property
-    def stats(self) -> dict:
-        base = super().stats
-        return {**base, "events_handled": self._events_handled,
-                "economy": self.economy_report()}
-
-    async def close(self):
-        await self._client.aclose()
-
-
-# ─────────────────────────────────────────────
 # SWARM ORCHESTRATOR
 # ─────────────────────────────────────────────
 
@@ -793,38 +520,18 @@ class GH05T3Swarm:
         self.sentinel  = SentinelAgent()
         self.nexus     = NexusAgent()
         self.chronicle = ChronicleAgent()
-        self.ledger    = LedgerAgent()
         self._agents   = [self.oracle, self.forge, self.codex,
-                          self.sentinel, self.nexus, self.chronicle, self.ledger]
-        self._marketplace_tasks: list[asyncio.Task] = []
+                          self.sentinel, self.nexus, self.chronicle]
         log.info(f"[Swarm] {len(self._agents)} specialists online")
 
     async def boot_announcement(self):
-        """Announce swarm boot to all channels and start marketplace workers."""
+        """Announce swarm boot to all channels."""
         await self.chronicle.boot()
-
-        # Start marketplace job workers for each agent
-        if _MARKETPLACE:
-            for agent in [self.oracle, self.forge, self.codex,
-                          self.sentinel, self.ledger]:
-                if hasattr(agent, "claim_marketplace_jobs"):
-                    t = asyncio.create_task(agent.claim_marketplace_jobs(),
-                                            name=f"{agent.agent_id}-marketplace")
-                    self._marketplace_tasks.append(t)
-            log.info("[Swarm] %d marketplace workers started", len(self._marketplace_tasks))
-
-            # Schedule hourly CVE feed refresh for SENTINEL
-            async def _cve_loop():
-                while True:
-                    await asyncio.sleep(3600)
-                    await self.sentinel.fetch_cve_feed(limit=15)
-            asyncio.create_task(_cve_loop(), name="sentinel-cve-feed")
-
         await self.bus.emit(
             src="GH05T3",
             content=(
-                "⚡ SWARM ONLINE — 7 specialists active: "
-                "ORACLE · FORGE · CODEX · SENTINEL · NEXUS · CHRONICLE · LEDGER"
+                "⚡ SWARM ONLINE — 6 specialists active: "
+                "ORACLE · FORGE · CODEX · SENTINEL · NEXUS · CHRONICLE"
             ),
             channel="#broadcast",
             msg_type=MsgType.SYSTEM,
@@ -854,8 +561,6 @@ class GH05T3Swarm:
                                "script", "endpoint", "api", "module", "refactor"}),
                 ("CODEX",    {"review", "debug", "fix", "optimize", "lint", "test",
                                "analyze code", "check code", "improve code"}),
-                ("LEDGER",   {"billing", "stripe", "subscription", "invoice",
-                               "payment", "revenue", "refund", "charge"}),
                 ("ORACLE",   {"research", "find", "what is", "explain", "summarize",
                                "lookup", "retrieve", "history", "context", "who is"}),
             ]

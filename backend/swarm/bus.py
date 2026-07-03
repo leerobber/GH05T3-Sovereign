@@ -37,37 +37,8 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Callable, Awaitable, Any, Optional
 from enum import Enum
-from string import Template
-
-from pydantic import BaseModel, Field
-from swarm.circuit_breaker import get_breaker, CircuitBreakerOpen
 
 log = logging.getLogger("gh0st3.swarm.bus")
-
-# Pre-compiled template for common log content construction (reduces .format overhead in hot KAIROS/swarm paths)
-SWARM_LOG_TMPL = Template("[${src}][${channel}] ${content}")
-
-class LogSchema(BaseModel):
-    """Structured LogSchema for SWARM agent logs and messages.
-    Validates before JSON serialization to protect against malformed data in agents/KAIROS.
-    Replaces ad-hoc .format() for log entries.
-    """
-    id: str
-    channel: str
-    msg_type: str
-    src: str
-    dst: str = "*"
-    content: str
-    metadata: dict = Field(default_factory=dict)
-    timestamp: float
-    seq: int = 0
-    ts_human: Optional[str] = None
-
-    def to_validated_dict(self) -> dict:
-        return self.model_dump(exclude_none=True)
-
-    def to_validated_json(self) -> str:
-        return self.model_dump_json(exclude_none=True)
 
 CHAT_LOG_PATH = Path("memory/conversations.jsonl")
 MAX_HISTORY   = 5000   # messages kept in-memory ring buffer
@@ -149,16 +120,8 @@ class ConversationLog:
 
     def append(self, msg: SwarmMessage):
         self._ring.append(msg)
-        d = msg.to_dict()
-        try:
-            # Use LogSchema to validate structure before serialization (protection for SWARM agents)
-            schema = LogSchema(**d)
-            line = schema.to_validated_json()
-        except Exception as e:
-            log.warning("LogSchema validation failed for %s: %s; falling back", msg.id, e)
-            line = msg.to_json()
         with open(self.path, "a") as f:
-            f.write(line + "\n")
+            f.write(msg.to_json() + "\n")
 
     def recent(self, n: int = 100, channel: str = None,
                src: str = None, msg_type: MsgType = None) -> list[dict]:
@@ -334,14 +297,12 @@ class SwarmBus:
 
     @property
     def stats(self) -> dict:
-        from swarm.circuit_breaker import all_stats as cb_stats
         return {
-            "agents":          len(self._agents),
-            "active_agents":   sum(1 for a in self._agents.values() if a.get("active")),
-            "channels":        list(self._subs.keys()),
-            "ws_clients":      len(self._ws_clients),
-            "log":             self.log.stats,
-            "circuit_breakers": cb_stats(),
+            "agents":       len(self._agents),
+            "active_agents": sum(1 for a in self._agents.values() if a.get("active")),
+            "channels":     list(self._subs.keys()),
+            "ws_clients":   len(self._ws_clients),
+            "log":          self.log.stats,
         }
 
     async def direct(self, src: str, dst: str, content: str,
@@ -388,24 +349,12 @@ class SwarmAgent:
         self.bus.subscribe(f"#swarm/{self.agent_id}", self._handle)
 
     async def _handle(self, msg: SwarmMessage):
-        """Route inbound messages to on_message, protected by a circuit breaker."""
+        """Route inbound messages to on_message."""
         if msg.src == self.agent_id:
             return   # ignore own messages
         self._msg_count += 1
         try:
-            async with get_breaker(self.agent_id):
-                await self.on_message(msg)
-        except CircuitBreakerOpen:
-            log.warning("[%s] circuit OPEN — NACK to %s (type=%s)",
-                        self.agent_id, msg.src, msg.msg_type)
-            if msg.src and msg.src not in ("*", self.agent_id):
-                await self.bus.emit(
-                    src=self.agent_id,
-                    content=f"[NACK] {self.agent_id} circuit breaker open — message rejected",
-                    channel=f"#swarm/{msg.src}",
-                    msg_type=MsgType.ERROR,
-                    dst=msg.src,
-                )
+            await self.on_message(msg)
         except Exception as e:
             log.error(f"[{self.agent_id}] on_message error: {e}")
             await self.say(f"Error handling {msg.msg_type}: {e}",

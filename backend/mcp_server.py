@@ -1,4 +1,4 @@
-﻿"""GH05T3 MCP server â€” exposes the gateway as Model Context Protocol tools.
+"""GH05T3 MCP server — exposes the gateway as Model Context Protocol tools.
 
 Mount via gateway_v3.py:
     from mcp_server import get_mcp_asgi, wire_gateway, MCP_AVAILABLE
@@ -19,18 +19,12 @@ from __future__ import annotations
 
 import json
 import logging
-
-try:
-    from run_logger import RunLogger
-    _run_logger = RunLogger()
-except Exception:
-    _run_logger = None
 import os
 from typing import Optional
 
 log = logging.getLogger("gh0st3.mcp")
 
-# â”€â”€ Late-bound gateway state (set by wire_gateway at startup) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Late-bound gateway state (set by wire_gateway at startup) ─────────────────
 _bus            = None
 _memory         = None
 _omega          = None
@@ -51,21 +45,21 @@ def wire_gateway(bus, memory, omega, swarm, ghost, peer_registry) -> None:
     log.info("MCP server wired to gateway state")
 
 
-# â”€â”€ MCP tool definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── MCP tool definitions ──────────────────────────────────────────────────────
 try:
     from mcp.server.fastmcp import FastMCP
 
     mcp = FastMCP(
         "GH05T3",
         instructions=(
-            "GH05T3 â€” sovereign AI mesh on TatorTot (Lenovo LOQ, RTX 5050). "
+            "GH05T3 — sovereign AI mesh on TatorTot (Lenovo LOQ, RTX 5050). "
             "Five swarm agents: ARCHITECT, SENTINEL, SAGE, EXECUTOR, GITHUB. "
             "Tools: chat, status, memory recall, swarm delegation, GitHub push, "
             "GhostScript execution, peer mesh control."
         ),
     )
 
-    # â”€â”€ CHAT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── CHAT ─────────────────────────────────────────────────────────────────
 
     @mcp.tool()
     async def chat(message: str) -> str:
@@ -98,7 +92,7 @@ try:
             "cycle_id":     state.cycle_id,
         })
 
-    # â”€â”€ STATUS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── STATUS ────────────────────────────────────────────────────────────────
 
     @mcp.tool()
     async def get_status() -> str:
@@ -114,7 +108,7 @@ try:
             "memory":     _memory.stats(),
         })
 
-    # â”€â”€ MEMORY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── MEMORY ────────────────────────────────────────────────────────────────
 
     @mcp.tool()
     async def memory_recall(query: str, top_k: int = 5) -> str:
@@ -144,7 +138,7 @@ try:
         shard_id = await _memory.store(content=content, room=room, tags=tag_list)
         return json.dumps({"ok": True, "shard_id": shard_id, "room": room})
 
-    # â”€â”€ SWARM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── SWARM ─────────────────────────────────────────────────────────────────
 
     @mcp.tool()
     async def swarm_delegate(task: str, agent: Optional[str] = None) -> str:
@@ -184,7 +178,7 @@ try:
         )
         return json.dumps({"ok": True, "channel": channel, "src": src})
 
-    # â”€â”€ CONVERSATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── CONVERSATIONS ─────────────────────────────────────────────────────────
 
     @mcp.tool()
     async def get_conversations(n: int = 50, channel: Optional[str] = None) -> str:
@@ -202,10 +196,10 @@ try:
             "stats":    _bus.log.stats,
         })
 
-    # â”€â”€ GITHUB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── GITHUB ────────────────────────────────────────────────────────────────
 
     @mcp.tool()
-    async def github_push(files_json: str, message: str = "ðŸ–¤ GH05T3 MCP push", branch: str = "main") -> str:
+    async def github_push(files_json: str, message: str = "🖤 GH05T3 MCP push", branch: str = "main") -> str:
         """Push files to GH05T3's GitHub repository.
 
         Args:
@@ -246,13 +240,13 @@ try:
             await gh.close()
             return json.dumps({"ok": False, "error": str(exc)})
 
-    # â”€â”€ GHOSTSCRIPT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── GHOSTSCRIPT ───────────────────────────────────────────────────────────
 
     @mcp.tool()
     async def ghostscript_run(src: str) -> str:
         """Execute a GhostScript program in GH05T3's AI scripting runtime.
 
-        GhostScript is GH05T3's domain language â€” supports variables, async/await,
+        GhostScript is GH05T3's domain language — supports variables, async/await,
         pipeline operators, LLM calls, memory ops, and multi-agent routing.
 
         Example:
@@ -262,7 +256,7 @@ try:
 
         Returns JSON execution trace with output, proposals, and emits.
         """
-        from ghostscript import (ghostscript)
+        from ghostscript import run_async as _gs_run
         from ghost_llm import chat_once as _chat_once
 
         async def _llm_fn(prompt: str) -> str:
@@ -277,7 +271,7 @@ try:
         )
         return json.dumps(result)
 
-    # â”€â”€ PEER MESH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── PEER MESH ─────────────────────────────────────────────────────────────
 
     @mcp.tool()
     async def list_peers() -> str:
@@ -391,12 +385,7 @@ try:
                 try:
                     r = await client.post(
                         f"{peer['url']}/swarm/broadcast",
-                        json={
-                            "content": content,
-                            "src": "MESH",
-                            "channel": channel,
-                            "msg_type": "chat",
-                        },
+                        params={"content": content, "src": "MESH"},
                         headers=headers,
                     )
                     results.append({"peer": peer["label"], "ok": r.status_code == 200})
@@ -405,7 +394,7 @@ try:
 
         return json.dumps({"ok": True, "local": True, "peers": results})
 
-    # â”€â”€ ASGI factory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── ASGI factory ─────────────────────────────────────────────────────────
 
     def get_mcp_asgi():
         """Return the Starlette ASGI app for SSE MCP transport."""
@@ -413,7 +402,7 @@ try:
 
     MCP_AVAILABLE = True
     log.info(
-        "MCP server initialised â€” 14 tools: chat, get_status, memory_recall, "
+        "MCP server initialised — 14 tools: chat, get_status, memory_recall, "
         "memory_store, swarm_delegate, emit_to_bus, get_conversations, "
         "github_push, github_status, ghostscript_run, list_peers, "
         "refresh_peers, peer_delegate, peer_chat, mesh_broadcast"
@@ -426,6 +415,6 @@ except ImportError:
         return None
 
     log.warning(
-        "mcp package not installed â€” MCP server disabled. "
+        "mcp package not installed — MCP server disabled. "
         "Run: pip install mcp"
     )

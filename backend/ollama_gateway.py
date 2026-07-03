@@ -12,7 +12,6 @@ GPU protection env vars (set in backend/.env):
                            0 = unload immediately, -1 = never unload (default 0)
     OLLAMA_NUM_CTX         context window tokens (default 2048, saves VRAM)
     OLLAMA_NUM_PREDICT     max output tokens per call (default 512)
-    OLLAMA_TEMPERATURE     sampling temperature (default 0.85 for SAGE diversity)
 """
 from __future__ import annotations
 
@@ -94,11 +93,10 @@ async def call(
     if not url:
         raise RuntimeError("OLLAMA_GATEWAY_URL not configured")
 
-    keep_alive_raw = os.environ.get("OLLAMA_KEEP_ALIVE", "10m").strip()
+    keep_alive_raw = os.environ.get("OLLAMA_KEEP_ALIVE", "0").strip()
     keep_alive = int(keep_alive_raw) if keep_alive_raw.lstrip("-").isdigit() else keep_alive_raw
     num_ctx     = int(os.environ.get("OLLAMA_NUM_CTX",     "2048"))
     num_predict = int(os.environ.get("OLLAMA_NUM_PREDICT", "512"))
-    temperature = float(os.environ.get("OLLAMA_TEMPERATURE", "0.85"))
 
     payload = {
         "model": model,
@@ -106,24 +104,23 @@ async def call(
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
         ],
-        "stream": False,
+        "temperature": 0.6,
         "keep_alive": keep_alive,
         "options": {
-            "temperature": temperature,
             "num_ctx":     num_ctx,
             "num_predict": num_predict,
         },
     }
 
     async with _get_sem():
-        LOG.debug("ollama call — model=%s ctx=%d keep_alive=%s", model, num_ctx, keep_alive)
+        LOG.debug("ollama call — model=%s ctx=%d keep_alive=%d", model, num_ctx, keep_alive)
         async with httpx.AsyncClient(timeout=timeout) as c:
-            r = await c.post(f"{url}/api/chat", json=payload)
+            r = await c.post(f"{url}/v1/chat/completions", json=payload)
             r.raise_for_status()
-            return r.json()["message"]["content"]
+            return r.json()["choices"][0]["message"]["content"]
 
 def resolved_url() -> str:
-    return (os.environ.get("OLLAMA_GATEWAY_URL") or "http://localhost:11434").rstrip("/")
+    return (os.environ.get("OLLAMA_GATEWAY_URL") or "").rstrip("/")
 
 
 async def ping() -> dict:
@@ -133,10 +130,10 @@ async def ping() -> dict:
                 "error": "OLLAMA_GATEWAY_URL not set"}
     try:
         async with httpx.AsyncClient(timeout=3.0) as c:
-            r = await c.get(f"{url}/api/tags")
+            r = await c.get(f"{url}/v1/models")
             r.raise_for_status()
             j = r.json()
-            models = [m.get("name") for m in j.get("models", []) if m.get("name")]
+            models = [m.get("id") for m in j.get("data", []) if m.get("id")]
             return {
                 "reachable": True, "url": url, "models": models,
                 "preferred": PREFERRED,

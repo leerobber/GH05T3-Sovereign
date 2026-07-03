@@ -1,4 +1,4 @@
-﻿"""Telegram bot â€” real long-polling worker.
+"""Telegram bot — real long-polling worker.
 - No webhook needed (container friendly).
 - Token stored in Mongo (single-user personal). Start/stop via API.
 - First message from any chat auto-locks that chat_id unless allow_open=True.
@@ -17,7 +17,7 @@ LOG = logging.getLogger("ghost.telegram")
 
 API = "https://api.telegram.org"
 _MY_PID = os.getpid()
-_LOCK_TTL = 35       # seconds â€” heartbeat must refresh within this window
+_LOCK_TTL = 35       # seconds — heartbeat must refresh within this window
 _HEARTBEAT = 15      # seconds between heartbeat refreshes
 
 
@@ -37,7 +37,7 @@ class TelegramPoller:
             {"_id": "singleton"}, {"$set": cfg}, upsert=True
         )
 
-    # â”€â”€ Distributed lock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Distributed lock ─────────────────────────────────────────────────────
 
     async def _try_claim_lock(self) -> bool:
         """Atomically claim the poller lock. Returns True if we own it."""
@@ -47,7 +47,7 @@ class TelegramPoller:
                 {
                     "_id": "poll_lock",
                     "$or": [
-                        {"expires_at": {"$lt": now}},   # expired â€” up for grabs
+                        {"expires_at": {"$lt": now}},   # expired — up for grabs
                         {"pid": _MY_PID},               # we already own it
                     ],
                 },
@@ -57,7 +57,7 @@ class TelegramPoller:
             )
             if result:
                 return True
-            # No matching doc â€” try upsert if no lock exists at all
+            # No matching doc — try upsert if no lock exists at all
             try:
                 await self.db.telegram_lock.insert_one(
                     {"_id": "poll_lock", "pid": _MY_PID, "expires_at": now + _LOCK_TTL}
@@ -86,7 +86,7 @@ class TelegramPoller:
         except Exception:
             pass
 
-    # â”€â”€ Status / lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Status / lifecycle ───────────────────────────────────────────────────
 
     async def status(self) -> dict:
         cfg = await self._get_cfg() or {}
@@ -124,7 +124,7 @@ class TelegramPoller:
         await self._release_lock()
         return {"ok": True}
 
-    # â”€â”€ Main poll loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Main poll loop ───────────────────────────────────────────────────────
 
     async def _run(self, token: str):
         offset = 0
@@ -144,23 +144,12 @@ class TelegramPoller:
             return
 
         LOG.info("telegram poller started @%s (pid=%d)", uname, _MY_PID)
-
-        # Clear any stale webhook before entering long-poll mode.
-        # A registered webhook blocks getUpdates with a 409 Conflict.
-        try:
-            async with httpx.AsyncClient(timeout=10) as c:
-                r = await c.post(f"{base}/deleteWebhook", json={"drop_pending_updates": False})
-                if r.status_code == 200 and r.json().get("ok"):
-                    LOG.info("telegram: cleared stale webhook")
-        except Exception as e:  # noqa: BLE001
-            LOG.warning("telegram: deleteWebhook failed (non-fatal): %s", e)
-
         last_heartbeat = 0.0
 
         while not self._stop:
-            # â”€â”€ Acquire / refresh distributed lock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            # ── Acquire / refresh distributed lock ──────────────────────────
             if not await self._try_claim_lock():
-                LOG.debug("telegram: another instance holds the lock â€” waiting 20s")
+                LOG.debug("telegram: another instance holds the lock — waiting 20s")
                 await asyncio.sleep(20)
                 continue
 
@@ -170,12 +159,26 @@ class TelegramPoller:
                 await self._refresh_lock()
                 last_heartbeat = now
 
-            # â”€â”€ Long-poll â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            # ── Long-poll ───────────────────────────────────────────────────
             try:
                 async with httpx.AsyncClient(timeout=35) as c:
-                    # AUTO-DISABLED by GH05T3 aggressive engine: r = await c.get(
-                    pass  # safe placeholder — long-poll disabled by aggressive engine
-                    for upd in []:
+                    r = await c.get(
+                        f"{base}/getUpdates",
+                        params={"offset": offset, "timeout": 25},
+                    )
+                    j = r.json()
+                    if not j.get("ok"):
+                        desc = j.get("description", "")
+                        await self.save_cfg({"last_error": desc})
+                        if "409" in str(r.status_code) or "Conflict" in desc:
+                            # Release our lock — another poller won the race
+                            await self._release_lock()
+                            LOG.warning("telegram 409 — yielding lock, retry in 30s")
+                            await asyncio.sleep(30)
+                        else:
+                            await asyncio.sleep(5)
+                        continue
+                    for upd in j.get("result", []):
                         offset = upd["update_id"] + 1
                         msg = upd.get("message") or upd.get("edited_message")
                         if not msg:
@@ -191,7 +194,7 @@ class TelegramPoller:
                             await self.save_cfg({"locked_chat_id": chat_id})
                             locked = chat_id
                         if locked and chat_id != locked:
-                            await self._send(base, chat_id, "â›” this ghost is locked to another chat.")
+                            await self._send(base, chat_id, "⛔ this ghost is locked to another chat.")
                             continue
                         if not text.strip():
                             continue

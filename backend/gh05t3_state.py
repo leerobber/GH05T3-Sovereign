@@ -137,10 +137,9 @@ def initial_state() -> dict:
              "model": "-", "role": "Traffic Director", "priority": -1, "load": 0.12},
         ],
         "repos": [
-            {"name": "sovereign-core", "desc": "Central hub — gateway, KAIROS, Aegis-Vault ledger, auction", "wire": "SOVEREIGN_CORE_URL (port 8000)"},
-            {"name": "GH05T3", "desc": "Avery (CFO/SIC) — the intelligence engine behind SovereignNation", "wire": "localhost:8001 (this service)"},
-            {"name": "DGM", "desc": "Self-improving coding agent (Darwin Gödel Machine)", "wire": "llm_withtools_sovereign.py"},
-            {"name": "HyperAgents", "desc": "Self-referential task optimization swarm", "wire": "llm_local.py → sovereign gateway"},
+            {"name": "sovereign-core", "desc": "Central hub \u2014 gateway, KAIROS, metrics", "wire": "IS the gateway (port 8000)"},
+            {"name": "DGM", "desc": "Self-improving coding agent (Darwin G\u00f6del Machine)", "wire": "llm_withtools_sovereign.py"},
+            {"name": "HyperAgents", "desc": "Self-referential task optimization swarm", "wire": "llm_local.py \u2192 gateway"},
             {"name": "Honcho", "desc": "TypeScript dashboard + voice + live monitoring", "wire": "useSovereignCore hook + WebSocket"},
             {"name": "contentai-pro", "desc": "Multi-agent AI content engine", "wire": "llm_sovereign.py (priority 0)"},
             {"name": "Termux Assistant", "desc": "Android mobile AI terminal agent", "wire": "sovereign_client.py (stdlib only)"},

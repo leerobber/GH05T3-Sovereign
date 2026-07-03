@@ -537,14 +537,6 @@ def create_github_webhook_router():
             payload=payload,
         )
 
-        # Dispatch marketplace jobs for async agent processing
-        try:
-            from agent_marketplace import ingest_github_event
-            await ingest_github_event(event, payload)
-        except Exception as e:
-            log.error("[marketplace] github ingestion failed (event=%s): %s",
-                      event, e, exc_info=True)
-
         return {"ok": True, "event": event}
 
     return router
