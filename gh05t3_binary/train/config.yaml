@@ -2,15 +2,18 @@ epochs: 20
 batch_size: 8
 seq_len: 128
 lr: 3e-4
-# Scale-up stage 2 (from dim=256/layers=4 -> 384/6 -> this, ~31.6M params):
-# verified stable on the real corpus -- loss 9.96->6.65 over 20 epochs, no
-# NaN, continuing the trend of faster convergence + better final loss at
-# each stage (stage 1 was 10.32->6.76). Still well within this machine's
-# 8GB VRAM (~126MB fp32 for the model itself). head_dim (dim/num_heads)
-# held at 64 across all stages.
-dim: 512
-num_layers: 8
-num_heads: 8
+# Scale-up stage 3 (256/4 -> 384/6 -> 512/8 -> this, ~83.2M params):
+# first stage verified with a real train/val split (val_fraction below),
+# not just training loss -- val loss tracked train loss closely the whole
+# run (final: train=6.64, val=6.77, gap only 0.13) and was still
+# decreasing smoothly at epoch 20 with no plateau/uptick. No overfitting
+# signal at this scale/epoch count; the "loss gets better each stage"
+# trend from stages 1-2 appears to reflect real learning, not just
+# memorizing the fixed-size corpus. Still well within this machine's 8GB
+# VRAM (~333MB fp32 for the model itself). head_dim held at 64.
+dim: 768
+num_layers: 10
+num_heads: 12
 binary_ratio: 0.95
 
 # stabilizer: "mgc" (default, MagnitudeGrowthClamper -- hard-clamps
