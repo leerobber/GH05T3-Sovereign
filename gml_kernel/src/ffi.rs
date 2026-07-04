@@ -186,3 +186,56 @@ pub extern "C" fn gh05t3_binary_forward_layer_batched(
     );
     0
 }
+
+/// Ternary sibling of gh05t3_binary_forward_layer_batched (weights in
+/// {-1,0,+1} -- see gh05t3_binary/core/binary_layers.py::TernaryLinear
+/// and gh05t3_binary/inference/pack_ternary.py). Two packed weight
+/// bitplanes (nonzero mask, sign mask) instead of one, plus a single
+/// per-tensor alpha scale. Same caller-owned-buffer contract as every
+/// other binary_inference export. Returns 0 on success, a negative error
+/// code otherwise.
+#[no_mangle]
+pub extern "C" fn gh05t3_ternary_forward_layer_batched(
+    inputs_ptr: *const f32,
+    inputs_len: usize,
+    nonzero_weights_ptr: *const u64,
+    nonzero_weights_len: usize,
+    sign_weights_ptr: *const u64,
+    sign_weights_len: usize,
+    alpha: f32,
+    out_features: usize,
+    k_packed: usize,
+    num_rows: usize,
+    outputs_ptr: *mut f32,
+    outputs_len: usize,
+) -> i32 {
+    if inputs_ptr.is_null()
+        || nonzero_weights_ptr.is_null()
+        || sign_weights_ptr.is_null()
+        || outputs_ptr.is_null()
+    {
+        return -1;
+    }
+    if inputs_len != num_rows * k_packed * 64 {
+        return -2;
+    }
+    if nonzero_weights_len != out_features * k_packed {
+        return -3;
+    }
+    if sign_weights_len != out_features * k_packed {
+        return -4;
+    }
+    if outputs_len != num_rows * out_features {
+        return -5;
+    }
+
+    let inputs = unsafe { std::slice::from_raw_parts(inputs_ptr, inputs_len) };
+    let nonzero_weights = unsafe { std::slice::from_raw_parts(nonzero_weights_ptr, nonzero_weights_len) };
+    let sign_weights = unsafe { std::slice::from_raw_parts(sign_weights_ptr, sign_weights_len) };
+    let outputs = unsafe { std::slice::from_raw_parts_mut(outputs_ptr, outputs_len) };
+
+    crate::binary_inference::ternary_forward_layer_batched(
+        inputs, nonzero_weights, sign_weights, alpha, out_features, k_packed, num_rows, outputs,
+    );
+    0
+}

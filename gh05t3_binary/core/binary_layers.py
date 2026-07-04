@@ -61,6 +61,61 @@ class BinaryLinear(nn.Module):
         return F.linear(x, binary_weight)
 
 
+class _TernarySTE(torch.autograd.Function):
+    """Straight-through estimator for threshold-based ternarization
+    (Ternary Weight Networks, Li & Liu 2016, arXiv:1605.04711): forward
+    quantizes to {-1, 0, +1} using a per-tensor threshold `delta`,
+    backward passes gradient through unchanged -- same full-pass-through
+    convention as _SignSTE/_RoundSTE above (no extra gradient clipping).
+    `delta` is expected to already be detached (computed under
+    torch.no_grad() by the caller), so it gets no gradient here.
+    """
+
+    @staticmethod
+    def forward(ctx, x: torch.Tensor, delta: torch.Tensor) -> torch.Tensor:
+        pos = (x > delta).to(x.dtype)
+        neg = (x < -delta).to(x.dtype)
+        return pos - neg
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor):
+        return grad_output, None
+
+
+class TernaryLinear(nn.Module):
+    """Ternary linear layer: weights quantized to {-1, 0, +1}, per Ternary
+    Weight Networks (Li & Liu, 2016). Unlike BinaryLinear, a weight can be
+    exactly zero -- the network can actually turn a connection off instead
+    of always contributing +-magnitude -- at 2 bits/weight instead of 1
+    (still 16x smaller than fp32, vs. binary's 32x).
+
+    Threshold: delta = 0.7*mean(|W|) (the paper's fixed constant).
+    Scale: alpha = mean(|W_i| : |W_i| > delta), the least-squares-optimal
+    scale for the {-1,0,+1} approximation of W restricted to its nonzero
+    support. alpha is recomputed from the live fp32 weight every forward
+    pass and is itself differentiable (it's a masked mean of |weight|,
+    not passed through the STE), so gradient reaches it directly, on top
+    of the STE gradient reaching the +-1/0 decision.
+    """
+
+    def __init__(self, in_features: int, out_features: int):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(out_features, in_features) * 0.02)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        w = self.weight
+        with torch.no_grad():
+            delta = 0.7 * w.abs().mean()
+
+        ternary = _TernarySTE.apply(w, delta)
+        mask = (ternary != 0).to(w.dtype)
+        nonzero_count = mask.sum().clamp(min=1.0)
+        alpha = (w.abs() * mask).sum() / nonzero_count
+
+        ternary_weight = ternary * alpha
+        return F.linear(x, ternary_weight)
+
+
 class MagnitudeAwareINBL(nn.Module):
     """MA-INBL: splits input into direction/magnitude, binarizes direction,
     reintegrates quantized magnitude."""
