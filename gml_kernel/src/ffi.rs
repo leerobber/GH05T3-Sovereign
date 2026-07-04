@@ -106,3 +106,41 @@ pub extern "C" fn gh05t3_free_string(ptr: *mut std::os::raw::c_char) {
         drop(std::ffi::CString::from_raw(ptr));
     }
 }
+
+/// Real SIMD inference: computes one binarized layer's forward pass
+/// (see binary_inference module -- signed accumulation, not XNOR+popcount,
+/// since this model's activations are continuous, only weights are +-1).
+/// Reads from and writes into caller-owned buffers (numpy arrays on the
+/// Python side) -- no Rust-side allocation, so there's nothing to free.
+/// Returns 0 on success, a negative error code otherwise.
+#[no_mangle]
+pub extern "C" fn gh05t3_binary_forward_layer(
+    input_ptr: *const f32,
+    input_len: usize,
+    packed_weights_ptr: *const u64,
+    weights_len: usize,
+    out_features: usize,
+    k_packed: usize,
+    output_ptr: *mut f32,
+    output_len: usize,
+) -> i32 {
+    if input_ptr.is_null() || packed_weights_ptr.is_null() || output_ptr.is_null() {
+        return -1;
+    }
+    if input_len < k_packed * 64 {
+        return -2;
+    }
+    if weights_len != out_features * k_packed {
+        return -3;
+    }
+    if output_len != out_features {
+        return -4;
+    }
+
+    let input = unsafe { std::slice::from_raw_parts(input_ptr, input_len) };
+    let packed_weights = unsafe { std::slice::from_raw_parts(packed_weights_ptr, weights_len) };
+    let output = unsafe { std::slice::from_raw_parts_mut(output_ptr, output_len) };
+
+    crate::binary_inference::forward_layer(input, packed_weights, out_features, k_packed, output);
+    0
+}
