@@ -144,3 +144,45 @@ pub extern "C" fn gh05t3_binary_forward_layer(
     crate::binary_inference::forward_layer(input, packed_weights, out_features, k_packed, output);
     0
 }
+
+/// Batched sibling of gh05t3_binary_forward_layer: runs `num_rows`
+/// independent forward passes in one FFI call (e.g. every token in a
+/// [batch*seq_len, in_features] activation tensor), looping over rows on
+/// the Rust side so a real multi-layer model forward pass doesn't pay a
+/// Python<->Rust round trip per token per layer. Same caller-owned-buffer
+/// contract as the single-row version -- no Rust-side allocation.
+/// Returns 0 on success, a negative error code otherwise.
+#[no_mangle]
+pub extern "C" fn gh05t3_binary_forward_layer_batched(
+    inputs_ptr: *const f32,
+    inputs_len: usize,
+    packed_weights_ptr: *const u64,
+    weights_len: usize,
+    out_features: usize,
+    k_packed: usize,
+    num_rows: usize,
+    outputs_ptr: *mut f32,
+    outputs_len: usize,
+) -> i32 {
+    if inputs_ptr.is_null() || packed_weights_ptr.is_null() || outputs_ptr.is_null() {
+        return -1;
+    }
+    if inputs_len != num_rows * k_packed * 64 {
+        return -2;
+    }
+    if weights_len != out_features * k_packed {
+        return -3;
+    }
+    if outputs_len != num_rows * out_features {
+        return -4;
+    }
+
+    let inputs = unsafe { std::slice::from_raw_parts(inputs_ptr, inputs_len) };
+    let packed_weights = unsafe { std::slice::from_raw_parts(packed_weights_ptr, weights_len) };
+    let outputs = unsafe { std::slice::from_raw_parts_mut(outputs_ptr, outputs_len) };
+
+    crate::binary_inference::forward_layer_batched(
+        inputs, packed_weights, out_features, k_packed, num_rows, outputs,
+    );
+    0
+}

@@ -88,6 +88,33 @@ pub fn forward_layer(
     }
 }
 
+/// Batched version of forward_layer: computes `num_rows` independent
+/// forward passes (e.g. one per token in a [batch*seq_len, in_features]
+/// activation tensor) in a single call, looping over rows on the Rust
+/// side. Exists specifically to avoid per-token Python<->Rust FFI call
+/// overhead when wiring this into a real model forward pass -- a real
+/// concern (not hypothetical): a 12-layer model with 7 BinaryLinear calls
+/// per layer, called once per token, would otherwise mean 84 * seq_len
+/// individual FFI round-trips per forward pass.
+pub fn forward_layer_batched(
+    inputs: &[f32],       // num_rows * (k_packed * 64), row-major
+    packed_weights: &[u64],
+    out_features: usize,
+    k_packed: usize,
+    num_rows: usize,
+    outputs: &mut [f32],  // num_rows * out_features, row-major
+) {
+    let row_in_len = k_packed * 64;
+    assert_eq!(inputs.len(), num_rows * row_in_len);
+    assert_eq!(outputs.len(), num_rows * out_features);
+
+    for r in 0..num_rows {
+        let row_input = &inputs[r * row_in_len..(r + 1) * row_in_len];
+        let row_output = &mut outputs[r * out_features..(r + 1) * out_features];
+        forward_layer(row_input, packed_weights, out_features, k_packed, row_output);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +198,50 @@ mod tests {
             let expected = signed_accumulate_row_scalar(&input, row);
             assert!((output[j] - expected).abs() < 1e-3);
         }
+    }
+
+    #[test]
+    fn forward_layer_batched_matches_repeated_single_row_calls() {
+        let out_features = 6;
+        let k_packed = 3;
+        let num_rows = 5;
+        let row_in_len = k_packed * 64;
+        let mut seed = 999u64;
+        let packed_weights = random_bits(&mut seed, out_features * k_packed);
+
+        let inputs: Vec<f32> = (0..num_rows * row_in_len)
+            .map(|i| ((i as f32) * 0.037).cos() * 2.0)
+            .collect();
+
+        let mut batched_outputs = vec![0.0f32; num_rows * out_features];
+        forward_layer_batched(
+            &inputs, &packed_weights, out_features, k_packed, num_rows, &mut batched_outputs,
+        );
+
+        for r in 0..num_rows {
+            let row_input = &inputs[r * row_in_len..(r + 1) * row_in_len];
+            let mut single_output = vec![0.0f32; out_features];
+            forward_layer(row_input, &packed_weights, out_features, k_packed, &mut single_output);
+
+            let batched_row = &batched_outputs[r * out_features..(r + 1) * out_features];
+            for j in 0..out_features {
+                assert!(
+                    (batched_row[j] - single_output[j]).abs() < 1e-6,
+                    "row {r} col {j}: batched={} single={}",
+                    batched_row[j],
+                    single_output[j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn forward_layer_batched_rejects_mismatched_input_length() {
+        let packed_weights = vec![0u64; 2];
+        let mut outputs = vec![0.0f32; 2];
+        // inputs too short for num_rows=1, k_packed=2 (needs 128 elements)
+        let inputs = vec![0.0f32; 64];
+        forward_layer_batched(&inputs, &packed_weights, 1, 2, 1, &mut outputs);
     }
 }
