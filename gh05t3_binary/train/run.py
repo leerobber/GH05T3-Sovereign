@@ -17,4 +17,10 @@ if __name__ == "__main__":
         batch_size=cfg["batch_size"],
         seq_len=cfg["seq_len"],
         lr=float(cfg["lr"]),
+        tokenizer_type=cfg.get("tokenizer", "char"),
+        vocab_size=cfg.get("vocab_size", 256),
+        tokenizer_path=cfg.get("tokenizer_path"),
+        num_layers=cfg.get("num_layers", 4),
+        dim=cfg.get("dim", 256),
+        num_heads=cfg.get("num_heads", 4),
     )

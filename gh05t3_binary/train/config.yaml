@@ -1,11 +1,28 @@
 epochs: 20
 batch_size: 8
-seq_len: 64
+seq_len: 128
 lr: 3e-4
 dim: 256
 num_layers: 4
 num_heads: 4
-vocab_size: 256
 binary_ratio: 0.95
-dataset: gh05t3_binary/train/data.txt
+
+# tokenizer: "char" (SimpleCharTokenizer, per-line TextDataset, vocab_size
+# fixed at 256) or "bpe" (real subword tokenizer trained on `dataset` if
+# tokenizer_path doesn't already exist, TokenStreamDataset for full-corpus
+# chunking). vocab_size below is the *requested* BPE vocab -- the actual
+# trained vocab may be smaller if the corpus doesn't have enough distinct
+# content, and that actual size is what gets used for the model/checkpoint.
+tokenizer: bpe
+vocab_size: 4096
+tokenizer_path: gh05t3_binary/train/checkpoints/tokenizer.json
+
+# Real corpus extracted from local GH05T3 reasoning data via
+# `python -m gh05t3_binary.train.prepare_corpus` (backend/data/training/
+# reasoning_chains.jsonl -> plaintext). That source file is untracked/
+# gitignored -- it's real local data left over from the original backend/
+# copy, not something this repo ships. Fall back to data.txt (the tiny
+# bundled demo corpus, use tokenizer: char with it) if corpus.txt isn't
+# present on your machine.
+dataset: gh05t3_binary/train/checkpoints/corpus.txt
 checkpoint: gh05t3_binary/train/checkpoints/binary_v2.pt
