@@ -53,6 +53,7 @@ from integrations.stripe_integration import (
     verify_stripe_signature, process_stripe_event,
     all_subscribers, subscriber_count, STRIPE_WEBHOOK_SECRET,
 )
+from api.binary_training import router as binary_training_router
 from personas import team_roster, get_persona
 from integrations.story_editor import (
     story_editor_greeting, story_editor_turn,
@@ -199,6 +200,9 @@ app.add_middleware(
 
 # Mount GitHub webhook router
 app.include_router(create_github_webhook_router())
+
+# Mount binary transformer training dashboard (GET /binary/training)
+app.include_router(binary_training_router)
 
 # Mount MCP SSE server at /mcp (Claude Code connects to /mcp/sse)
 _mcp_asgi = get_mcp_asgi()
