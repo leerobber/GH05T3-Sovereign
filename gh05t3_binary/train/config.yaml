@@ -2,14 +2,15 @@ epochs: 20
 batch_size: 8
 seq_len: 128
 lr: 3e-4
-# Scale-up stage 1 (from dim=256/layers=4, ~5.5M params): verified stable
-# on the real corpus -- loss 10.32->6.76 over 20 epochs, no NaN, converges
-# faster and to a slightly better final loss than the smaller baseline
-# (~14.7M params, still well within this machine's 8GB VRAM). head_dim
-# (dim/num_heads) kept at 64 when scaling further.
-dim: 384
-num_layers: 6
-num_heads: 6
+# Scale-up stage 2 (from dim=256/layers=4 -> 384/6 -> this, ~31.6M params):
+# verified stable on the real corpus -- loss 9.96->6.65 over 20 epochs, no
+# NaN, continuing the trend of faster convergence + better final loss at
+# each stage (stage 1 was 10.32->6.76). Still well within this machine's
+# 8GB VRAM (~126MB fp32 for the model itself). head_dim (dim/num_heads)
+# held at 64 across all stages.
+dim: 512
+num_layers: 8
+num_heads: 8
 binary_ratio: 0.95
 
 # stabilizer: "mgc" (default, MagnitudeGrowthClamper -- hard-clamps
