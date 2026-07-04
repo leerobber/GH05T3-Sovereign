@@ -62,6 +62,7 @@ def _get_model_and_tokenizer():
             num_heads=ckpt.get("num_heads", 4),
             vocab_size=ckpt.get("vocab_size", _VOCAB_SIZE),
             binary_ratio=1.0,
+            stabilizer=ckpt.get("stabilizer", "mgc"),
         )
         model.load_state_dict(ckpt["model_state"])
         _MODEL_CACHE["trained"] = True

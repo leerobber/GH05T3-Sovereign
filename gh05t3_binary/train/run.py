@@ -23,4 +23,5 @@ if __name__ == "__main__":
         num_layers=cfg.get("num_layers", 4),
         dim=cfg.get("dim", 256),
         num_heads=cfg.get("num_heads", 4),
+        stabilizer=cfg.get("stabilizer", "mgc"),
     )

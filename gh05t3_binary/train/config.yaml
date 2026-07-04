@@ -7,6 +7,11 @@ num_layers: 4
 num_heads: 4
 binary_ratio: 0.95
 
+# stabilizer: "mgc" (default, MagnitudeGrowthClamper -- hard-clamps
+# residual growth to a fixed ratio) or "damg" (DepthAwareMagnitudeGate --
+# learns a per-token gate as a function of |x|, |O|, and depth instead).
+stabilizer: mgc
+
 # tokenizer: "char" (SimpleCharTokenizer, per-line TextDataset, vocab_size
 # fixed at 256) or "bpe" (real subword tokenizer trained on `dataset` if
 # tokenizer_path doesn't already exist, TokenStreamDataset for full-corpus

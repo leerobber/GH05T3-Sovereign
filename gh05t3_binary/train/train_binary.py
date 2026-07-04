@@ -50,6 +50,7 @@ def train_binary_transformer(
     num_layers: int = 4,
     dim: int = 256,
     num_heads: int = 4,
+    stabilizer: str = "mgc",
 ):
     """state, if given, is a backend.runtime.gh05t3_orchestrator.GH05T3State
     to update in-process. Progress is also always written to a
@@ -62,6 +63,9 @@ def train_binary_transformer(
     + per-line TextDataset) or "bpe" (real subword tokenizer, trained on
     data_path if tokenizer_path doesn't already exist, + TokenStreamDataset
     for full-corpus chunking instead of per-line pad/truncate).
+
+    stabilizer: "mgc" (default, MagnitudeGrowthClamper) or "damg"
+    (DepthAwareMagnitudeGate) -- see core/transformer.py.
     """
     tokenizer, dataset = _build_tokenizer_and_dataset(
         data_path, seq_len, tokenizer_type, vocab_size, tokenizer_path,
@@ -76,6 +80,7 @@ def train_binary_transformer(
         dim=dim,
         num_heads=num_heads,
         vocab_size=tokenizer.vocab_size,
+        stabilizer=stabilizer,
         binary_ratio=0.95,
     )
 
@@ -130,6 +135,7 @@ def train_binary_transformer(
                 "num_layers": num_layers,
                 "dim": dim,
                 "num_heads": num_heads,
+                "stabilizer": stabilizer,
                 "tokenizer_type": tokenizer_type,
                 "tokenizer_path": tokenizer_path if tokenizer_type == "bpe" else None,
             },
@@ -175,6 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-layers", type=int, default=4)
     parser.add_argument("--dim", type=int, default=256)
     parser.add_argument("--num-heads", type=int, default=4)
+    parser.add_argument("--stabilizer", choices=["mgc", "damg"], default="mgc")
 
     args = parser.parse_args()
 
@@ -191,4 +198,5 @@ if __name__ == "__main__":
         num_layers=args.num_layers,
         dim=args.dim,
         num_heads=args.num_heads,
+        stabilizer=args.stabilizer,
     )
