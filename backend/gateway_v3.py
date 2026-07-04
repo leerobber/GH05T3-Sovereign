@@ -49,10 +49,6 @@ from swarm.peer_registry import PeerRegistry
 from integrations.claude_integration import ClaudeSwarmAgent
 from integrations.github_integration import GitHubAgent, create_github_webhook_router
 from mcp_server import get_mcp_asgi, wire_gateway, MCP_AVAILABLE
-from integrations.stripe_integration import (
-    verify_stripe_signature, process_stripe_event,
-    all_subscribers, subscriber_count, STRIPE_WEBHOOK_SECRET,
-)
 from api.binary_training import router as binary_training_router
 from personas import team_roster, get_persona
 from integrations.story_editor import (
@@ -975,59 +971,6 @@ async def story_session_state(session_id: str):
         "story":      sess["story"],
         "turns":      len(sess["history"]),
     }
-
-
-# ─────────────────────────────────────────────
-# STRIPE — billing & subscription webhooks
-# ─────────────────────────────────────────────
-
-@app.post("/stripe/webhook")
-async def stripe_webhook(request: Request):
-    """
-    Stripe webhook receiver.
-    Point your Stripe Dashboard webhook at: https://your-domain/stripe/webhook
-    Required env vars: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-    """
-    body      = await request.body()
-    sig       = request.headers.get("stripe-signature", "")
-
-    if STRIPE_WEBHOOK_SECRET:
-        if not verify_stripe_signature(body, sig, STRIPE_WEBHOOK_SECRET):
-            raise HTTPException(status_code=400, detail="Invalid Stripe signature")
-
-    try:
-        event = json.loads(body)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    event_type = event.get("type", "")
-    result     = process_stripe_event(event_type, event.get("data", {}))
-
-    # Emit to swarm bus so Kai (NEXUS) and the team can react
-    if result:
-        await bus.emit(
-            src     = "STRIPE",
-            content = f"[STRIPE] {event_type} — {json.dumps(result)}",
-            channel = "#nexus",
-            msg_type= MsgType.TASK,
-            dst     = "NEXUS",
-            metadata= {"stripe_event": event_type, "result": result},
-        )
-        log.info("Stripe event processed: %s → %s", event_type, result.get("action"))
-
-    return {"received": True, "event": event_type, "action": result.get("action") if result else "ignored"}
-
-
-@app.get("/stripe/subscribers")
-async def stripe_subscribers():
-    """Current subscriber summary (counts only — no PII in this endpoint)."""
-    return subscriber_count()
-
-
-@app.get("/stripe/subscribers/all")
-async def stripe_subscribers_all():
-    """Full subscriber list — internal use only, protect this behind auth in prod."""
-    return {"subscribers": all_subscribers()}
 
 
 # ─────────────────────────────────────────────
