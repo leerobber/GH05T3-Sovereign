@@ -1,6 +1,6 @@
 import torch
 
-from gh05t3_binary.train.dataset import TokenStreamDataset
+from gh05t3_binary.train.dataset import TokenStreamDataset, build_train_val_token_datasets
 
 
 class _IdentityTokenizer:
@@ -52,3 +52,33 @@ def test_token_stream_dataset_raises_on_too_short_corpus():
         assert False, "expected ValueError for too-short corpus"
     except ValueError:
         pass
+
+
+def test_train_val_split_is_disjoint_and_covers_corpus():
+    tokenizer = _IdentityTokenizer()
+    text = "the quick brown fox jumps over the lazy dog " * 20  # 900 chars
+    full_ids = tokenizer.encode(" ".join([text]))
+
+    train_ds, val_ds = build_train_val_token_datasets([text], tokenizer, seq_len=8, val_fraction=0.1)
+
+    # sizes: val gets the last ~10% of tokens, train gets the rest
+    assert len(train_ds.ids) == int(len(full_ids) * 0.9)
+    assert len(val_ds.ids) == len(full_ids) - len(train_ds.ids)
+
+    # disjoint by construction: val's ids are exactly the tail the train
+    # dataset does NOT contain
+    assert torch.equal(torch.cat([train_ds.ids, val_ds.ids]), torch.tensor(full_ids, dtype=torch.long))
+
+    assert len(train_ds) > 0
+    assert len(val_ds) > 0
+
+
+def test_train_val_split_rejects_invalid_fraction():
+    tokenizer = _IdentityTokenizer()
+    text = "the quick brown fox jumps over the lazy dog " * 20
+    for bad_fraction in (0.0, 1.0, -0.1, 1.5):
+        try:
+            build_train_val_token_datasets([text], tokenizer, seq_len=8, val_fraction=bad_fraction)
+            assert False, f"expected ValueError for val_fraction={bad_fraction}"
+        except ValueError:
+            pass

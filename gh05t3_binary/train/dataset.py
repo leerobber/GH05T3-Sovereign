@@ -52,17 +52,27 @@ class TokenStreamDataset(Dataset):
     """
 
     def __init__(self, texts, tokenizer, seq_len: int = 64):
-        self.tokenizer = tokenizer
-        self.seq_len = seq_len
-
         full_text = " ".join(texts)
-        self.ids = torch.tensor(tokenizer.encode(full_text), dtype=torch.long)
+        ids = torch.tensor(tokenizer.encode(full_text), dtype=torch.long)
+        self._init_from_ids(ids, seq_len)
 
+    @classmethod
+    def from_ids(cls, ids: torch.Tensor, seq_len: int) -> "TokenStreamDataset":
+        """Builds a dataset directly from an already-tokenized id stream --
+        used by build_train_val_token_datasets to construct disjoint train/
+        val datasets from two slices of one corpus without re-tokenizing."""
+        obj = cls.__new__(cls)
+        obj._init_from_ids(ids, seq_len)
+        return obj
+
+    def _init_from_ids(self, ids: torch.Tensor, seq_len: int) -> None:
+        self.ids = ids
+        self.seq_len = seq_len
         self.num_chunks = max(0, (len(self.ids) - 1) // seq_len)
         if self.num_chunks == 0:
             raise ValueError(
                 f"Corpus too short ({len(self.ids)} tokens) for seq_len={seq_len}; "
-                "use a larger corpus or a smaller seq_len."
+                "use a larger corpus, a smaller seq_len, or a smaller val_fraction."
             )
 
     def __len__(self):
@@ -74,3 +84,27 @@ class TokenStreamDataset(Dataset):
         x = chunk[:-1]
         y = chunk[1:]
         return x, y
+
+
+def build_train_val_token_datasets(texts, tokenizer, seq_len: int, val_fraction: float = 0.1):
+    """Tokenizes the corpus once, then splits the resulting id stream by
+    position into a training prefix and a validation suffix -- disjoint by
+    construction, so there's no leakage between the two chunked datasets
+    built from them. Held-out loss (not just training loss) is the only
+    way to tell "the model is learning" apart from "the model is
+    memorizing a small corpus," especially while scaling capacity up on a
+    fixed-size real corpus.
+    """
+    if not 0.0 < val_fraction < 1.0:
+        raise ValueError(f"val_fraction must be in (0, 1), got {val_fraction}")
+
+    full_text = " ".join(texts)
+    ids = torch.tensor(tokenizer.encode(full_text), dtype=torch.long)
+
+    split_idx = int(len(ids) * (1.0 - val_fraction))
+    train_ids = ids[:split_idx]
+    val_ids = ids[split_idx:]
+
+    train_ds = TokenStreamDataset.from_ids(train_ids, seq_len)
+    val_ds = TokenStreamDataset.from_ids(val_ids, seq_len)
+    return train_ds, val_ds

@@ -24,4 +24,5 @@ if __name__ == "__main__":
         dim=cfg.get("dim", 256),
         num_heads=cfg.get("num_heads", 4),
         stabilizer=cfg.get("stabilizer", "mgc"),
+        val_fraction=float(cfg.get("val_fraction", 0.0)),
     )

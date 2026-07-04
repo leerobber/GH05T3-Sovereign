@@ -7,11 +7,11 @@ from torch.utils.data import DataLoader
 
 from gh05t3_binary.oss.integration import GH05T3BinaryOSS
 from gh05t3_binary.train.tokenizer import SimpleCharTokenizer
-from gh05t3_binary.train.dataset import TextDataset, TokenStreamDataset
+from gh05t3_binary.train.dataset import TextDataset, TokenStreamDataset, build_train_val_token_datasets
 
 
 def _build_tokenizer_and_dataset(
-    data_path: str, seq_len: int, tokenizer_type: str, vocab_size: int, tokenizer_path,
+    data_path: str, seq_len: int, tokenizer_type: str, vocab_size: int, tokenizer_path, val_fraction: float = 0.0,
 ):
     with open(data_path, "r", encoding="utf-8") as f:
         texts = [line.strip() for line in f.readlines() if line.strip()]
@@ -28,12 +28,23 @@ def _build_tokenizer_and_dataset(
             tokenizer = BPETokenizer.train(
                 corpus_path=data_path, vocab_size=vocab_size, save_path=tokenizer_path,
             )
-        dataset = TokenStreamDataset(texts, tokenizer, seq_len=seq_len)
-    else:
-        tokenizer = SimpleCharTokenizer()
-        dataset = TextDataset(texts, tokenizer, seq_len=seq_len)
 
-    return tokenizer, dataset
+        if val_fraction > 0:
+            dataset, val_dataset = build_train_val_token_datasets(
+                texts, tokenizer, seq_len=seq_len, val_fraction=val_fraction,
+            )
+        else:
+            dataset, val_dataset = TokenStreamDataset(texts, tokenizer, seq_len=seq_len), None
+    else:
+        if val_fraction > 0:
+            raise ValueError(
+                "val_fraction is only supported with tokenizer_type='bpe' "
+                "(TextDataset's per-line demo path has no split logic)"
+            )
+        tokenizer = SimpleCharTokenizer()
+        dataset, val_dataset = TextDataset(texts, tokenizer, seq_len=seq_len), None
+
+    return tokenizer, dataset, val_dataset
 
 
 def train_binary_transformer(
@@ -51,6 +62,7 @@ def train_binary_transformer(
     dim: int = 256,
     num_heads: int = 4,
     stabilizer: str = "mgc",
+    val_fraction: float = 0.0,
 ):
     """state, if given, is a backend.runtime.gh05t3_orchestrator.GH05T3State
     to update in-process. Progress is also always written to a
@@ -66,11 +78,18 @@ def train_binary_transformer(
 
     stabilizer: "mgc" (default, MagnitudeGrowthClamper) or "damg"
     (DepthAwareMagnitudeGate) -- see core/transformer.py.
+
+    val_fraction: 0.0 (default, no validation -- backward compatible) or a
+    fraction in (0, 1) held out from the *end* of the tokenized corpus
+    (bpe/TokenStreamDataset only) for per-epoch validation loss. Training
+    loss alone can't distinguish real learning from memorizing a small
+    corpus, especially while scaling model capacity up on fixed-size data.
     """
-    tokenizer, dataset = _build_tokenizer_and_dataset(
-        data_path, seq_len, tokenizer_type, vocab_size, tokenizer_path,
+    tokenizer, dataset, val_dataset = _build_tokenizer_and_dataset(
+        data_path, seq_len, tokenizer_type, vocab_size, tokenizer_path, val_fraction,
     )
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) if val_dataset is not None else None
 
     # Use the tokenizer's *actual* vocab size for the model, not the
     # requested one -- BPE training can settle on a smaller vocab than
@@ -90,9 +109,12 @@ def train_binary_transformer(
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
-    print(f"Training on {device} with {len(dataset)} samples...")
+    print(f"Training on {device} with {len(dataset)} samples" + (
+        f" ({len(val_dataset)} held out for validation)..." if val_dataset is not None else "..."
+    ))
 
     loss_curve: list = []
+    val_loss_curve: list = []
 
     for epoch in range(epochs):
         model.train()
@@ -117,7 +139,25 @@ def train_binary_transformer(
 
         avg = total_loss / len(loader)
         loss_curve.append(avg)
-        print(f"Epoch {epoch+1}/{epochs} — loss={avg:.4f}")
+
+        val_avg = None
+        if val_loader is not None:
+            model.eval()
+            total_val_loss = 0.0
+            with torch.no_grad():
+                for x, y in val_loader:
+                    x = x.to(device)
+                    y = y.to(device)
+                    logits = model(x)
+                    val_loss = criterion(logits.reshape(-1, tokenizer.vocab_size), y.reshape(-1))
+                    total_val_loss += val_loss.item()
+            val_avg = total_val_loss / len(val_loader)
+            val_loss_curve.append(val_avg)
+
+        if val_avg is not None:
+            print(f"Epoch {epoch+1}/{epochs} — loss={avg:.4f} val_loss={val_avg:.4f}")
+        else:
+            print(f"Epoch {epoch+1}/{epochs} — loss={avg:.4f}")
 
         if state is not None:
             state.binary_training_loss_curve.append(avg)
@@ -142,12 +182,14 @@ def train_binary_transformer(
             save_path,
         )
 
-        _write_training_state_sidecar(save_path, epoch + 1, avg, loss_curve)
+        _write_training_state_sidecar(save_path, epoch + 1, avg, loss_curve, val_avg, val_loss_curve)
 
     print(f"Training complete. Saved checkpoint to {save_path}")
 
 
-def _write_training_state_sidecar(save_path: str, epochs_done: int, last_loss: float, loss_curve) -> None:
+def _write_training_state_sidecar(
+    save_path: str, epochs_done: int, last_loss: float, loss_curve, last_val_loss, val_loss_curve,
+) -> None:
     """Writes gh05t3_binary/train/training_state.json (next to save_path's
     directory) so backend/api/binary_training.py can report real progress
     without needing an in-memory reference to this training run."""
@@ -158,6 +200,8 @@ def _write_training_state_sidecar(save_path: str, epochs_done: int, last_loss: f
                 "epochs": epochs_done,
                 "last_loss": last_loss,
                 "loss_curve": loss_curve,
+                "last_val_loss": last_val_loss,
+                "val_loss_curve": val_loss_curve,
                 "checkpoint": save_path,
             },
             f,
@@ -182,6 +226,7 @@ if __name__ == "__main__":
     parser.add_argument("--dim", type=int, default=256)
     parser.add_argument("--num-heads", type=int, default=4)
     parser.add_argument("--stabilizer", choices=["mgc", "damg"], default="mgc")
+    parser.add_argument("--val-fraction", type=float, default=0.0)
 
     args = parser.parse_args()
 
@@ -199,4 +244,5 @@ if __name__ == "__main__":
         dim=args.dim,
         num_heads=args.num_heads,
         stabilizer=args.stabilizer,
+        val_fraction=args.val_fraction,
     )

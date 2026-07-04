@@ -8,8 +8,7 @@ process serves this endpoint, so there's no live Python object to query
 across that boundary.
 
 Standalone-runnable for direct testing (`python -m backend.api.binary_training`);
-wiring this router into the main gateway (gateway_v3.py/server.py) is a
-separate step.
+also mounted on the main gateway (gateway_v3.py).
 """
 from __future__ import annotations
 
@@ -32,6 +31,8 @@ def get_binary_training_state() -> dict:
             "trained": False,
             "epochs": 0,
             "loss_curve": [],
+            "last_val_loss": None,
+            "val_loss_curve": [],
             "last_checkpoint": None,
             "detail": "no training run has completed yet",
         }
@@ -44,6 +45,11 @@ def get_binary_training_state() -> dict:
         "epochs": state.get("epochs", 0),
         "last_loss": state.get("last_loss"),
         "loss_curve": state.get("loss_curve", []),
+        # Present (non-empty) only for runs started with val_fraction > 0.
+        # Training loss alone can't distinguish real learning from
+        # memorizing a small corpus.
+        "last_val_loss": state.get("last_val_loss"),
+        "val_loss_curve": state.get("val_loss_curve", []),
         "last_checkpoint": state.get("checkpoint"),
     }
 

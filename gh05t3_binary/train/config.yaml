@@ -37,3 +37,11 @@ tokenizer_path: gh05t3_binary/train/checkpoints/tokenizer.json
 # present on your machine.
 dataset: gh05t3_binary/train/checkpoints/corpus.txt
 checkpoint: gh05t3_binary/train/checkpoints/binary_v2.pt
+
+# val_fraction: 0.0 (default, no validation) or a fraction in (0, 1) held
+# out from the *end* of the tokenized corpus for per-epoch validation
+# loss (bpe/TokenStreamDataset only). Training loss alone can't tell
+# "the model is learning" apart from "the model is memorizing a small
+# corpus" -- especially relevant here since we're scaling model capacity
+# up while holding the corpus size fixed.
+val_fraction: 0.1
