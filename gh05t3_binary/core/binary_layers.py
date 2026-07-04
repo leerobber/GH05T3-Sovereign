@@ -96,11 +96,18 @@ class TernaryLinear(nn.Module):
     pass and is itself differentiable (it's a masked mean of |weight|,
     not passed through the STE), so gradient reaches it directly, on top
     of the STE gradient reaching the +-1/0 decision.
+
+    bias: if True, adds a full-precision (never quantized) bias term --
+    lets this be a drop-in replacement for nn.Linear(..., bias=True)
+    (e.g. HybridBinaryAttention.out_proj). Defaults to False to match
+    this file's other quantized layers, which are traditionally bias-free
+    and compose their own denorm/scale terms instead.
     """
 
-    def __init__(self, in_features: int, out_features: int):
+    def __init__(self, in_features: int, out_features: int, bias: bool = False):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(out_features, in_features) * 0.02)
+        self.bias = nn.Parameter(torch.zeros(out_features)) if bias else None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         w = self.weight
@@ -113,7 +120,7 @@ class TernaryLinear(nn.Module):
         alpha = (w.abs() * mask).sum() / nonzero_count
 
         ternary_weight = ternary * alpha
-        return F.linear(x, ternary_weight)
+        return F.linear(x, ternary_weight, self.bias)
 
 
 class MagnitudeAwareINBL(nn.Module):

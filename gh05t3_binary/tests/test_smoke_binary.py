@@ -1,5 +1,6 @@
 import torch
 
+from gh05t3_binary.core.binary_layers import TernaryLinear
 from gh05t3_binary.core.transformer import GH05T3BinaryTransformer
 from gh05t3_binary.hardware.detector import HardwareDetector
 from gh05t3_binary.hardware.dispatcher import HardwareAwareBinaryDispatcher
@@ -93,6 +94,27 @@ def test_unknown_stabilizer_rejected():
         assert False, "expected ValueError for unknown stabilizer"
     except ValueError:
         pass
+
+
+def test_attention_out_proj_is_ternary_and_trains():
+    """attention.out_proj used to be the only full-precision nn.Linear in
+    the attention block -- confirms it's now genuinely TernaryLinear
+    (not just importable, actually wired in) and that its weight and bias
+    both receive real gradients through a full model forward/backward."""
+    model = _small_model()
+    out_proj = model.layers[0].attention.out_proj
+    assert isinstance(out_proj, TernaryLinear)
+    assert out_proj.bias is not None
+
+    input_ids = torch.randint(0, 100, (1, 16))
+    logits = model(input_ids)
+    loss = logits.sum()
+    loss.backward()
+
+    assert out_proj.weight.grad is not None
+    assert torch.any(out_proj.weight.grad != 0)
+    assert out_proj.bias.grad is not None
+    assert torch.any(out_proj.bias.grad != 0)
 
 
 def test_hardware_dispatcher_matmul():

@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .binary_layers import MagnitudeAwareINBL
+from .binary_layers import MagnitudeAwareINBL, TernaryLinear
 
 
 class HybridBinaryAttention(nn.Module):
@@ -27,7 +27,12 @@ class HybridBinaryAttention(nn.Module):
         self.k_proj = MagnitudeAwareINBL(dim, dim)
         self.v_proj = MagnitudeAwareINBL(dim, dim)
 
-        self.out_proj = nn.Linear(dim, dim)
+        # Was a plain full-precision nn.Linear -- the only unquantized
+        # component in this module. Ternary (not binary) specifically
+        # because this sits right before the residual add: a zero state
+        # lets a head's contribution actually be dropped for a given
+        # output feature instead of always adding +-magnitude noise.
+        self.out_proj = TernaryLinear(dim, dim, bias=True)
         self.log_temperature = nn.Parameter(torch.zeros(1))
 
     def forward(

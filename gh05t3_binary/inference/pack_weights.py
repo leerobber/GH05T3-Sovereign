@@ -15,9 +15,10 @@ a separate, later step.
 Only true 1-bit layers (real gh05t3_binary.core.binary_layers.BinaryLinear
 instances -- found by walking the real nn.Module tree, not by guessing at
 key-name strings) are packed here. MultiBitLinear4 (4-bit, used for each
-block's out_proj and the final head) and all full-precision parameters
-(embedding, LayerNorm, denorm, basis, log_temperature, attention's plain
-nn.Linear out_proj) are explicitly left out and reported as skipped, not
+block's out_proj and the final head), TernaryLinear (2-bit, used for
+attention's out_proj -- see pack_ternary.py for its own exporter), and
+all full-precision parameters (embedding, LayerNorm, denorm, basis,
+log_temperature) are explicitly left out and reported as skipped, not
 silently dropped.
 """
 from __future__ import annotations
