@@ -30,6 +30,7 @@ backend/data/
 *.jsonl
 *.pt
 gh05t3_binary/train/checkpoints/
+gh05t3_binary/inference/checkpoints/
 
 # Build artifacts
 *.log
