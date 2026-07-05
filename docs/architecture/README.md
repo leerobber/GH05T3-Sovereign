@@ -17,6 +17,7 @@ the doc.
 | [0005](0005-binary-ledger-and-swarm.md) | mmap-backed BinaryLedger for agent-swarm state | Accepted, live |
 | [0006](0006-relationship-to-gh05t3-and-sovereign-core.md) | Relationship to GH05T3 and sovereign-core | Accepted, ongoing tension noted |
 | [0007](0007-rejected-proposals.md) | Rejected designs (why, and what was wrong with each) | Reference only |
+| [0008](0008-remove-hardcoded-slack-oauth-values.md) | Remove hardcoded Slack OAuth values | Resolved |
 
 ## How to add a new one
 

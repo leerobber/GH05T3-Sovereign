@@ -53,7 +53,10 @@ invented for this repo.
   whole ecosystem (GH05T3 `main`'s `OmniDNA`+`GenomicSubstrate`, GH05T3
   `main`'s separate `oss/ecosystem` species-FSM+economy, this repo's
   5-trait system, and sovereign-core's KAIROS/DGM) and none of them talk
-  to each other beyond the health-probe level above.
+  to each other beyond the health-probe level above. Full inventory,
+  updated after `oss/ecosystem` was wired to real telemetry (it no longer
+  runs on a synthetic sandbox — real KAIROS/ledger/Stripe signals now):
+  [GH05T3's `docs/architecture/evolution-systems-inventory.md`](https://github.com/leerobber/GH05T3/blob/main/docs/architecture/evolution-systems-inventory.md).
 - The Rust kernel work in this repo ([0002](0002-rust-kernel-strategy.md))
   and sovereign-core's own `sovereign-core-rs`+`sovereign-gpu` (a general
   WGSL/CUDA/Vulkan host runtime with WASM agents, started the same week)
