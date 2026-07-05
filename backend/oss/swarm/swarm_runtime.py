@@ -75,17 +75,20 @@ class SwarmRuntime:
         self.seq_len = seq_len
         self.batch_size = batch_size
 
-    def evaluate_genome(self, traits: dict[str, Any]) -> dict[str, Any]:
-        """Builds the genome's model fresh and runs one real forward pass
-        + real cross-entropy loss on a real (or seeded-random fallback)
-        token batch. Returns a real score and real wall-clock latency --
-        never a hardcoded placeholder value (the original rebuild spec's
+    def evaluate_genome(self, genome_id: str, traits: dict[str, Any]) -> dict[str, Any]:
+        """Builds (or reuses -- see BMEBridge's genome_id-keyed cache)
+        the genome's model and runs one real forward pass + real
+        cross-entropy loss on a real (or seeded-random fallback) token
+        batch. Returns a real score and real wall-clock latency -- never
+        a hardcoded placeholder value (the original rebuild spec's
         SwarmRuntime.evaluate_genome returned a literal
         {"score": 0.75, "latency": 0.01, "stability": 0.99} regardless of
         input; this replaces every one of those fields with a measured
-        value)."""
+        value). Re-evaluating the SAME genome_id gives the SAME real
+        score every time (deterministic per-genome seeding in
+        BMEBridge), not fresh randomness each call."""
         vocab_size = int(traits.get("vocab_size", 4096))
-        model = self.bme_bridge.apply_genome_to_engine(traits)
+        model = self.bme_bridge.apply_genome_to_engine(genome_id, traits)
 
         input_ids, targets = _load_real_eval_batch(self.seq_len, self.batch_size, vocab_size)
 

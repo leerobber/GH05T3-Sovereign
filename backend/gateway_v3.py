@@ -50,6 +50,7 @@ from integrations.claude_integration import ClaudeSwarmAgent
 from integrations.github_integration import GitHubAgent, create_github_webhook_router
 from mcp_server import get_mcp_asgi, wire_gateway, MCP_AVAILABLE
 from api.binary_training import router as binary_training_router
+from api.genome_api import router as genome_router
 from personas import team_roster, get_persona
 from integrations.story_editor import (
     story_editor_greeting, story_editor_turn,
@@ -199,6 +200,9 @@ app.include_router(create_github_webhook_router())
 
 # Mount binary transformer training dashboard (GET /binary/training)
 app.include_router(binary_training_router)
+
+# Mount genome subsystem (POST /oss/genome/register|evaluate|evolve, GET /oss/genome/list|best)
+app.include_router(genome_router)
 
 # Mount MCP SSE server at /mcp (Claude Code connects to /mcp/sse)
 _mcp_asgi = get_mcp_asgi()

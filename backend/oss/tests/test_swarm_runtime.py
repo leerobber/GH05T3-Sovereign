@@ -17,7 +17,7 @@ def _tiny_runtime() -> SwarmRuntime:
 
 def test_evaluate_genome_returns_real_measured_values_not_a_placeholder():
     runtime = _tiny_runtime()
-    result = runtime.evaluate_genome({"num_layers": 1, "dim": 32, "num_heads": 2, "vocab_size": 16})
+    result = runtime.evaluate_genome("g1", {"num_layers": 1, "dim": 32, "num_heads": 2, "vocab_size": 16})
 
     assert result["loss"] > 0.0
     assert result["score"] == -result["loss"]
@@ -30,12 +30,39 @@ def test_evaluate_genome_returns_real_measured_values_not_a_placeholder():
 
 def test_different_genome_shapes_produce_different_real_scores():
     runtime = _tiny_runtime()
-    small = runtime.evaluate_genome({"num_layers": 1, "dim": 16, "num_heads": 2, "vocab_size": 16})
-    big = runtime.evaluate_genome({"num_layers": 2, "dim": 32, "num_heads": 4, "vocab_size": 16})
+    small = runtime.evaluate_genome("small", {"num_layers": 1, "dim": 16, "num_heads": 2, "vocab_size": 16})
+    big = runtime.evaluate_genome("big", {"num_layers": 2, "dim": 32, "num_heads": 4, "vocab_size": 16})
 
     # Different architectures, different random inits -- virtually
     # certain to produce different real losses (continuous floats).
     assert small["score"] != big["score"]
+
+
+def test_re_evaluating_the_same_genome_id_gives_the_same_real_score():
+    """Reproducibility: the same unchanged genome evaluated twice (e.g.
+    across two evolution cycles it survives unmutated) must not look
+    like it randomly changed fitness -- BMEBridge's genome_id-keyed
+    deterministic seeding + caching guarantees this."""
+    runtime = _tiny_runtime()
+    traits = {"num_layers": 1, "dim": 16, "num_heads": 2, "vocab_size": 16}
+
+    first = runtime.evaluate_genome("stable-genome", traits)
+    second = runtime.evaluate_genome("stable-genome", traits)
+
+    # score/loss must be exactly reproducible; latency is real wall-clock
+    # timing and will naturally jitter between calls, so it's excluded.
+    assert first["score"] == second["score"]
+    assert first["loss"] == second["loss"]
+
+
+def test_different_genome_ids_with_identical_traits_can_still_score_differently():
+    runtime = _tiny_runtime()
+    traits = {"num_layers": 1, "dim": 16, "num_heads": 2, "vocab_size": 16}
+
+    a = runtime.evaluate_genome("genome-a", traits)
+    b = runtime.evaluate_genome("genome-b", traits)
+
+    assert a["loss"] != b["loss"]
 
 
 def test_eval_batch_uses_seeded_random_fallback_when_no_real_corpus_present(monkeypatch):

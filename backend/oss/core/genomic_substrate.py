@@ -45,7 +45,7 @@ class GenomicSubstrate:
         history (ChronosLedger) and the latest-score view (SpeciesMemory,
         used for selection)."""
         for genome in self.genome_plane.list_genomes():
-            result = self.swarm_runtime.evaluate_genome(genome.traits)
+            result = self.swarm_runtime.evaluate_genome(genome.id, genome.traits)
             self.chronos_ledger.record_result(genome.id, result)
             self.species_memory.update(genome.id, result)
 
@@ -63,7 +63,7 @@ class GenomicSubstrate:
         new_genomes = []
         for mutation in mutations:
             new_genome = self.genome_plane.apply_mutation(mutation)
-            result = self.swarm_runtime.evaluate_genome(new_genome.traits)
+            result = self.swarm_runtime.evaluate_genome(new_genome.id, new_genome.traits)
             self.chronos_ledger.record_result(new_genome.id, result)
             self.species_memory.update(new_genome.id, result)
             new_genomes.append(new_genome)
