@@ -6,6 +6,8 @@ stay independent even when their traits happen to be identical.
 """
 from __future__ import annotations
 
+from gh05t3_binary.core.binary_layers import BinaryLinear, TernaryLinear
+
 from backend.oss.core.bme_bridge import BMEBridge
 
 
@@ -40,6 +42,23 @@ def test_stabilizer_trait_actually_selects_the_real_stabilizer():
 
     assert mgc_model.transformer.stabilizer == "mgc"
     assert damg_model.transformer.stabilizer == "damg"
+
+
+def test_out_proj_quant_mode_trait_actually_selects_the_real_layer_type():
+    """The whole point of QuantModeMutation: the trait must genuinely
+    change which quantized layer type backs out_proj, not just be a
+    dict key nothing downstream reads."""
+    bridge = BMEBridge()
+    ternary_model = bridge.apply_genome_to_engine(
+        "g-ternary", {"num_layers": 1, "dim": 32, "num_heads": 2, "vocab_size": 20, "out_proj_quant_mode": "ternary"}
+    )
+    binary_model = bridge.apply_genome_to_engine(
+        "g-binary", {"num_layers": 1, "dim": 32, "num_heads": 2, "vocab_size": 20, "out_proj_quant_mode": "binary"}
+    )
+
+    assert isinstance(ternary_model.transformer.layers[0].attention.out_proj, TernaryLinear)
+    assert isinstance(binary_model.transformer.layers[0].attention.out_proj, BinaryLinear)
+    assert not isinstance(binary_model.transformer.layers[0].attention.out_proj, TernaryLinear)
 
 
 def test_missing_traits_fall_back_to_documented_defaults():

@@ -78,6 +78,7 @@ class BMEBridge:
                 vocab_size=int(traits.get("vocab_size", _DEFAULT_VOCAB_SIZE)),
                 binary_ratio=float(traits.get("binary_ratio", 0.95)),
                 stabilizer=str(traits.get("stabilizer", "mgc")),
+                out_proj_quant_mode=str(traits.get("out_proj_quant_mode", "ternary")),
             )
         finally:
             # Restore the caller's global RNG state -- seeding a genome's

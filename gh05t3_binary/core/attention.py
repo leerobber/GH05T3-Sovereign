@@ -5,7 +5,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .binary_layers import MagnitudeAwareINBL, TernaryLinear
+from .binary_layers import BinaryLinear, MagnitudeAwareINBL, TernaryLinear
+
+_OUT_PROJ_QUANT_MODES = {"ternary", "binary"}
 
 
 class HybridBinaryAttention(nn.Module):
@@ -14,25 +16,47 @@ class HybridBinaryAttention(nn.Module):
     - Float attention scores
     - Dual-scale compensation (r^2 for scores, r for values) during the
       transition to fully-binary inference (r -> 1.0)
+
+    out_proj_quant_mode: "ternary" (default) or "binary" -- which
+    quantized layer type backs out_proj. Was a plain full-precision
+    nn.Linear originally -- the only unquantized component in this
+    module -- then fixed to TernaryLinear specifically, since a zero
+    state right before the residual add lets a head's contribution
+    actually be dropped for a given output feature instead of always
+    adding +-magnitude noise. Made selectable (rather than hardcoded)
+    so a genome can evolve this choice per KernelGenome.quant_mode's
+    real historical precedent (see backend/oss/dna/mutation_operators.py's
+    QuantModeMutation) -- "binary" trades away the zero-state benefit
+    for 1 bit/weight instead of 2.
     """
 
-    def __init__(self, dim: int, num_heads: int, binary_ratio: float = 0.95):
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int,
+        binary_ratio: float = 0.95,
+        out_proj_quant_mode: str = "ternary",
+    ):
         super().__init__()
         self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.binary_ratio = binary_ratio
 
+        if out_proj_quant_mode not in _OUT_PROJ_QUANT_MODES:
+            raise ValueError(
+                f"Unknown out_proj_quant_mode {out_proj_quant_mode!r}, expected one of {_OUT_PROJ_QUANT_MODES}"
+            )
+        self.out_proj_quant_mode = out_proj_quant_mode
+
         self.q_proj = MagnitudeAwareINBL(dim, dim)
         self.k_proj = MagnitudeAwareINBL(dim, dim)
         self.v_proj = MagnitudeAwareINBL(dim, dim)
 
-        # Was a plain full-precision nn.Linear -- the only unquantized
-        # component in this module. Ternary (not binary) specifically
-        # because this sits right before the residual add: a zero state
-        # lets a head's contribution actually be dropped for a given
-        # output feature instead of always adding +-magnitude noise.
-        self.out_proj = TernaryLinear(dim, dim, bias=True)
+        if out_proj_quant_mode == "ternary":
+            self.out_proj = TernaryLinear(dim, dim, bias=True)
+        else:
+            self.out_proj = BinaryLinear(dim, dim, bias=True)
         self.log_temperature = nn.Parameter(torch.zeros(1))
 
     def forward(

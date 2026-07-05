@@ -50,15 +50,22 @@ class BinaryLinear(nn.Module):
     (via _SignSTE), so gradients flow back to it during backprop — the
     previous version cached torch.sign(weight) into a detached buffer,
     which silently made `weight` untrainable (zero gradient, ever).
+
+    bias: if True, adds a full-precision (never quantized) bias term --
+    same rationale and pattern as TernaryLinear's bias param below (lets
+    this be a drop-in nn.Linear(..., bias=True) replacement, e.g. for a
+    genome-selected out_proj). Defaults to False, this file's usual
+    convention.
     """
 
-    def __init__(self, in_features: int, out_features: int):
+    def __init__(self, in_features: int, out_features: int, bias: bool = False):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(out_features, in_features) * 0.02)
+        self.bias = nn.Parameter(torch.zeros(out_features)) if bias else None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         binary_weight = _SignSTE.apply(self.weight)
-        return F.linear(x, binary_weight)
+        return F.linear(x, binary_weight, self.bias)
 
 
 class _TernarySTE(torch.autograd.Function):

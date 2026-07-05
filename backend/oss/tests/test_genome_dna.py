@@ -10,7 +10,7 @@ import pytest
 
 from backend.oss.dna.genome_encoding import decode_genome, encode_genome
 from backend.oss.dna.genome_plane import Genome, GenomePlane
-from backend.oss.dna.mutation_operators import BinaryRatioJitterMutation, StabilizerSwitchMutation
+from backend.oss.dna.mutation_operators import BinaryRatioJitterMutation, QuantModeMutation, StabilizerSwitchMutation
 from backend.oss.dna.selection_strategies import HighestScoreSelection, LowestLatencySelection
 
 
@@ -87,6 +87,24 @@ def test_stabilizer_switch_flips_between_known_values_only():
 
     genome_unknown = Genome(id="g2", traits={"stabilizer": "something_fake"})
     assert not op.is_applicable(genome_unknown, {})
+
+
+def test_quant_mode_mutation_flips_between_known_values_only():
+    op = QuantModeMutation()
+    genome = Genome(id="g", traits={"out_proj_quant_mode": "ternary"})
+
+    assert op.is_applicable(genome, {})
+    mutation = op.create_mutation(genome, {})
+    assert mutation.apply(genome.traits)["out_proj_quant_mode"] == "binary"
+
+    genome_reverse = Genome(id="g2", traits={"out_proj_quant_mode": "binary"})
+    assert op.create_mutation(genome_reverse, {}).apply(genome_reverse.traits)["out_proj_quant_mode"] == "ternary"
+
+    genome_unknown = Genome(id="g3", traits={"out_proj_quant_mode": "something_fake"})
+    assert not op.is_applicable(genome_unknown, {})
+
+    genome_missing = Genome(id="g4", traits={})
+    assert not op.is_applicable(genome_missing, {})
 
 
 def test_highest_score_selection_picks_the_real_max():

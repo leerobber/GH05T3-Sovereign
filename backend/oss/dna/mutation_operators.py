@@ -100,3 +100,45 @@ class StabilizerSwitchMutation:
             description=f"stabilizer {current} -> {flipped}",
             _transform=transform,
         )
+
+
+class QuantModeMutation:
+    """Flips a genome's `out_proj_quant_mode` trait between the two real
+    quantization modes gh05t3_binary.core.attention.HybridBinaryAttention
+    actually supports for out_proj ("ternary" / "binary" -- see
+    gh05t3_binary/core/attention.py and binary_layers.py's BinaryLinear/
+    TernaryLinear). Inspired by a real historical precedent found in the
+    original GH05T3 repo's oss/living_loop/genome.py: a KernelGenome had
+    an evolvable quant_mode field, wired into mutate()/crossover(), whose
+    source no longer survives (same "ghost" pattern as several other
+    subsystems investigated this session). Rebuilt here against REAL,
+    already-verified components (BinaryLinear/TernaryLinear, and the
+    actual out_proj_quant_mode constructor parameter threaded through
+    HybridBinaryAttention/BinaryTransformerBlock/GH05T3BinaryTransformer/
+    GH05T3BinaryOSS), not reconstructed from bytecode or file names.
+
+    Only applicable to genomes declaring one of these two known values,
+    so it never invents a quant mode that doesn't exist in the real
+    model -- same convention as StabilizerSwitchMutation above.
+    """
+
+    _KNOWN = ("ternary", "binary")
+
+    def is_applicable(self, genome: Any, perf: dict[str, Any]) -> bool:
+        return genome.traits.get("out_proj_quant_mode") in self._KNOWN
+
+    def create_mutation(self, genome: Any, perf: dict[str, Any]) -> Mutation:
+        current = genome.traits["out_proj_quant_mode"]
+        flipped = "binary" if current == "ternary" else "ternary"
+
+        def transform(traits: dict[str, Any]) -> dict[str, Any]:
+            new_traits = dict(traits)
+            new_traits["out_proj_quant_mode"] = flipped
+            return new_traits
+
+        return Mutation(
+            base_id=genome.id,
+            new_id=f"{genome.id}-mut-{uuid.uuid4().hex[:8]}",
+            description=f"out_proj_quant_mode {current} -> {flipped}",
+            _transform=transform,
+        )

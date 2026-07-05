@@ -16,6 +16,7 @@ class GH05T3BinaryOSS(nn.Module):
         vocab_size: int = 50257,
         binary_ratio: float = 0.95,
         stabilizer: str = "mgc",
+        out_proj_quant_mode: str = "ternary",
     ):
         super().__init__()
         self.transformer = GH05T3BinaryTransformer(
@@ -25,6 +26,7 @@ class GH05T3BinaryOSS(nn.Module):
             vocab_size=vocab_size,
             binary_ratio=binary_ratio,
             stabilizer=stabilizer,
+            out_proj_quant_mode=out_proj_quant_mode,
         )
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:

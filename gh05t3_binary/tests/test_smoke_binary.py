@@ -1,6 +1,6 @@
 import torch
 
-from gh05t3_binary.core.binary_layers import TernaryLinear
+from gh05t3_binary.core.binary_layers import BinaryLinear, TernaryLinear
 from gh05t3_binary.core.transformer import GH05T3BinaryTransformer
 from gh05t3_binary.hardware.detector import HardwareDetector
 from gh05t3_binary.hardware.dispatcher import HardwareAwareBinaryDispatcher
@@ -115,6 +115,41 @@ def test_attention_out_proj_is_ternary_and_trains():
     assert torch.any(out_proj.weight.grad != 0)
     assert out_proj.bias.grad is not None
     assert torch.any(out_proj.bias.grad != 0)
+
+
+def test_attention_out_proj_quant_mode_is_selectable_and_real():
+    """out_proj_quant_mode="binary" must actually construct a real
+    BinaryLinear (not just accept the string and ignore it) -- and that
+    layer must genuinely train, same evidentiary bar as the ternary
+    default above."""
+    model = GH05T3BinaryTransformer(
+        num_layers=2, dim=128, num_heads=4, vocab_size=100, binary_ratio=0.95,
+        stabilizer="mgc", out_proj_quant_mode="binary",
+    )
+    out_proj = model.layers[0].attention.out_proj
+    assert isinstance(out_proj, BinaryLinear)
+    assert not isinstance(out_proj, TernaryLinear)  # BinaryLinear isn't a TernaryLinear subclass
+    assert out_proj.bias is not None
+
+    input_ids = torch.randint(0, 100, (1, 16))
+    logits = model(input_ids)
+    loss = logits.sum()
+    loss.backward()
+
+    assert out_proj.weight.grad is not None
+    assert torch.any(out_proj.weight.grad != 0)
+    assert out_proj.bias.grad is not None
+    assert torch.any(out_proj.bias.grad != 0)
+
+
+def test_attention_out_proj_quant_mode_rejects_unknown_value():
+    try:
+        GH05T3BinaryTransformer(
+            num_layers=1, dim=32, num_heads=2, vocab_size=20, out_proj_quant_mode="nonexistent",
+        )
+        assert False, "expected ValueError for unknown out_proj_quant_mode"
+    except ValueError:
+        pass
 
 
 def test_hardware_dispatcher_matmul():
