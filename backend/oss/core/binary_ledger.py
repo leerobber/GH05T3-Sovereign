@@ -107,6 +107,13 @@ class BinaryLedger:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
+    @property
+    def active_count(self) -> int:
+        """The high-water mark (see _scan_high_water_mark) -- how many
+        slots from index 0 have ever been written, not how many are
+        currently non-vacant. Use stats()["active_slots"] for the latter."""
+        return self._active
+
     def _check_index(self, index: int) -> None:
         if not (0 <= index < self.capacity):
             raise IndexError(f"slot {index} out of range [0, {self.capacity})")
