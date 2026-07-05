@@ -66,6 +66,17 @@ pub unsafe fn signed_accumulate_row_avx512(input: &[f32], weight_row: &[u64]) ->
 /// for all `out_features` rows, dispatching to AVX-512 if available at
 /// runtime, scalar otherwise. `input` must be pre-padded to
 /// `k_packed * 64` elements (zeros past the real in_features).
+///
+/// NOT parallelized, on purpose, after actually measuring it: a rayon
+/// par_iter_mut() version was tried here to address a confirmed 8-thread
+/// (PyTorch) vs 1-thread (this kernel) mismatch. Measured result: 32x
+/// SLOWER (703.8us -> 22488.2us for one isolated binary layer), because
+/// rayon's per-call work-stealing dispatch overhead vastly exceeds the
+/// actual work in one row (a few hundred nanoseconds of AVX-512
+/// accumulation) at this out_features size. The threading-mismatch
+/// observation was real; the fix was wrong for this granularity.
+/// Reverted immediately upon measuring it -- left as a documented dead
+/// end so it isn't tried again the same way.
 pub fn forward_layer(
     input: &[f32],
     packed_weights: &[u64],
@@ -193,6 +204,8 @@ pub unsafe fn ternary_accumulate_row_avx512(input: &[f32], nonzero_row: &[u64], 
 
 /// Ternary sibling of forward_layer: one full layer's forward pass,
 /// applying the single per-tensor alpha scale after accumulation.
+/// NOT parallelized -- see forward_layer's docstring above for why a
+/// rayon version was tried and measured 32x slower, then reverted.
 pub fn ternary_forward_layer(
     input: &[f32],
     nonzero_weights: &[u64],
