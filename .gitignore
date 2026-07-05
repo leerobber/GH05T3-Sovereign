@@ -25,12 +25,17 @@ models/
 
 # Training data / checkpoints
 backend/training/checkpoints/
-backend/data/
+backend/data/*
 *.safetensors
 *.jsonl
 *.pt
 gh05t3_binary/train/checkpoints/
 gh05t3_binary/inference/checkpoints/
+
+# Real, irreplaceable agent-swarm ledger data (not a regenerable build
+# artifact like the patterns above -- overrides both *.bin and
+# backend/data/* for this one file specifically).
+!backend/data/aethyro_swarm.bin
 
 # Build artifacts
 *.log
