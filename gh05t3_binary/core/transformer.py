@@ -58,6 +58,7 @@ class BinaryTransformerBlock(nn.Module):
         binary_ratio: float = 0.95,
         stabilizer: str = "mgc",
         out_proj_quant_mode: str = "ternary",
+        mainbl_threshold: float = 0.0,
     ):
         super().__init__()
         self.dim = dim
@@ -67,7 +68,9 @@ class BinaryTransformerBlock(nn.Module):
         self.stabilizer = stabilizer
         self._depth_aware = stabilizer == "damg"
 
-        self.attention = HybridBinaryAttention(dim, num_heads, binary_ratio, out_proj_quant_mode=out_proj_quant_mode)
+        self.attention = HybridBinaryAttention(
+            dim, num_heads, binary_ratio, out_proj_quant_mode=out_proj_quant_mode, mainbl_threshold=mainbl_threshold,
+        )
         self.out_proj = MultiBitLinear4(dim, dim)
 
         self.attn_diversify = OrthogonalResidualDecomposer(dim)
@@ -112,6 +115,7 @@ class GH05T3BinaryTransformer(nn.Module):
         binary_ratio: float = 0.95,
         stabilizer: str = "mgc",
         out_proj_quant_mode: str = "ternary",
+        mainbl_threshold: float = 0.0,
     ):
         super().__init__()
         self.num_layers = num_layers
@@ -121,13 +125,14 @@ class GH05T3BinaryTransformer(nn.Module):
         self.binary_ratio = binary_ratio
         self.stabilizer = stabilizer
         self.out_proj_quant_mode = out_proj_quant_mode
+        self.mainbl_threshold = mainbl_threshold
 
         self.embedding = nn.Embedding(vocab_size, dim)
         self.layers = nn.ModuleList(
             [
                 BinaryTransformerBlock(
                     dim, num_heads, max_depth=num_layers, binary_ratio=binary_ratio, stabilizer=stabilizer,
-                    out_proj_quant_mode=out_proj_quant_mode,
+                    out_proj_quant_mode=out_proj_quant_mode, mainbl_threshold=mainbl_threshold,
                 )
                 for _ in range(num_layers)
             ]

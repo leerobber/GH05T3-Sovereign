@@ -36,6 +36,7 @@ class HybridBinaryAttention(nn.Module):
         num_heads: int,
         binary_ratio: float = 0.95,
         out_proj_quant_mode: str = "ternary",
+        mainbl_threshold: float = 0.0,
     ):
         super().__init__()
         self.dim = dim
@@ -48,10 +49,15 @@ class HybridBinaryAttention(nn.Module):
                 f"Unknown out_proj_quant_mode {out_proj_quant_mode!r}, expected one of {_OUT_PROJ_QUANT_MODES}"
             )
         self.out_proj_quant_mode = out_proj_quant_mode
+        self.mainbl_threshold = mainbl_threshold
 
-        self.q_proj = MagnitudeAwareINBL(dim, dim)
-        self.k_proj = MagnitudeAwareINBL(dim, dim)
-        self.v_proj = MagnitudeAwareINBL(dim, dim)
+        # Same mainbl_threshold applied to all three -- q/k/v_proj are all
+        # MagnitudeAwareINBL instances receiving the same real input x, so
+        # a single genome-level trait gates all three uniformly (matching
+        # how binary_ratio is one value applied model-wide, not per-branch).
+        self.q_proj = MagnitudeAwareINBL(dim, dim, mag_threshold=mainbl_threshold)
+        self.k_proj = MagnitudeAwareINBL(dim, dim, mag_threshold=mainbl_threshold)
+        self.v_proj = MagnitudeAwareINBL(dim, dim, mag_threshold=mainbl_threshold)
 
         if out_proj_quant_mode == "ternary":
             self.out_proj = TernaryLinear(dim, dim, bias=True)

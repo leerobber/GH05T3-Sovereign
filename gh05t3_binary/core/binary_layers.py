@@ -132,20 +132,41 @@ class TernaryLinear(nn.Module):
 
 class MagnitudeAwareINBL(nn.Module):
     """MA-INBL: splits input into direction/magnitude, binarizes direction,
-    reintegrates quantized magnitude."""
+    reintegrates quantized magnitude.
 
-    def __init__(self, in_features: int, out_features: int):
+    mag_threshold: real magnitude gate, default 0.0 (disabled -- exact
+    original behavior, so the already-trained checkpoint's forward pass
+    is byte-for-byte unchanged unless a genome explicitly opts in).
+    When > 0.0, inputs whose norm falls below the threshold have their
+    projection suppressed to exactly zero instead of being normalized
+    into `direction = x / (mag + 1e-8)` -- at very small magnitudes that
+    division produces a unit vector dominated by numerical noise rather
+    than real directional signal, so gating it out is a real behavioral
+    choice, not a no-op dressed up as one. The gate is a hard step
+    (mag >= threshold), not a learned/differentiable parameter -- it's
+    set once at construction (typically by genome evolution, see
+    backend/oss/dna/mutation_operators.py's MainblThresholdMutation),
+    the same way binary_ratio/stabilizer/out_proj_quant_mode are fixed
+    architecture choices rather than gradient-trained values.
+    """
+
+    def __init__(self, in_features: int, out_features: int, mag_threshold: float = 0.0):
         super().__init__()
         self.binary_linear = BinaryLinear(in_features, out_features)
         self.denorm = nn.Parameter(torch.ones(out_features))
         self.mag_quantizer = UniformQuantizer(4)
+        self.mag_threshold = mag_threshold
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         mag = x.norm(dim=-1, keepdim=True)
         direction = x / (mag + 1e-8)
         y_dir = self.binary_linear(direction)
         mag_q = self.mag_quantizer(mag)
-        return y_dir * mag_q * self.denorm
+        out = y_dir * mag_q * self.denorm
+        if self.mag_threshold > 0.0:
+            gate = (mag >= self.mag_threshold).to(out.dtype)
+            out = out * gate
+        return out
 
 
 class InputNormalizedBinaryLinear(nn.Module):

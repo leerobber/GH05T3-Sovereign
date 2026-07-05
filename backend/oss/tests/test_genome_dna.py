@@ -10,7 +10,12 @@ import pytest
 
 from backend.oss.dna.genome_encoding import decode_genome, encode_genome
 from backend.oss.dna.genome_plane import Genome, GenomePlane
-from backend.oss.dna.mutation_operators import BinaryRatioJitterMutation, QuantModeMutation, StabilizerSwitchMutation
+from backend.oss.dna.mutation_operators import (
+    BinaryRatioJitterMutation,
+    MainblThresholdMutation,
+    QuantModeMutation,
+    StabilizerSwitchMutation,
+)
 from backend.oss.dna.selection_strategies import HighestScoreSelection, LowestLatencySelection
 
 
@@ -105,6 +110,48 @@ def test_quant_mode_mutation_flips_between_known_values_only():
 
     genome_missing = Genome(id="g4", traits={})
     assert not op.is_applicable(genome_missing, {})
+
+
+def test_mainbl_threshold_mutation_moves_in_log_space_and_clamps():
+    import math
+
+    op = MainblThresholdMutation(log_step=0.5, min_threshold=1e-4, max_threshold=2.0, rng=random.Random(7))
+    genome = Genome(id="g", traits={"mainbl_threshold": 0.1})
+
+    assert op.is_applicable(genome, {})
+    mutation = op.create_mutation(genome, {})
+    new_value = mutation.apply(genome.traits)["mainbl_threshold"]
+
+    # Real multiplicative (log-space) step: new/old must be exp(+-log_step),
+    # not a fixed additive delta.
+    ratio = new_value / 0.1
+    assert math.isclose(ratio, math.exp(0.5), rel_tol=1e-6) or math.isclose(ratio, math.exp(-0.5), rel_tol=1e-6)
+
+
+def test_mainbl_threshold_mutation_from_zero_jumps_to_floor_value():
+    op = MainblThresholdMutation(floor_value=1e-3, rng=random.Random(3))
+    genome = Genome(id="g", traits={"mainbl_threshold": 0.0})
+
+    mutation = op.create_mutation(genome, {})
+    new_value = mutation.apply(genome.traits)["mainbl_threshold"]
+
+    assert new_value > 0.0  # gating actually turns on, not stuck at 0
+
+
+def test_mainbl_threshold_mutation_clamps_to_bounds():
+    op = MainblThresholdMutation(log_step=10.0, min_threshold=0.01, max_threshold=1.0, rng=random.Random(5))
+    genome = Genome(id="g", traits={"mainbl_threshold": 0.5})
+
+    mutation = op.create_mutation(genome, {})
+    new_value = mutation.apply(genome.traits)["mainbl_threshold"]
+
+    assert 0.01 <= new_value <= 1.0
+
+
+def test_mainbl_threshold_mutation_not_applicable_without_the_trait():
+    op = MainblThresholdMutation()
+    genome = Genome(id="g", traits={"binary_ratio": 0.9})
+    assert not op.is_applicable(genome, {})
 
 
 def test_highest_score_selection_picks_the_real_max():

@@ -5,6 +5,7 @@ real behavior behind them.
 """
 from __future__ import annotations
 
+import math
 import random
 import uuid
 from dataclasses import dataclass
@@ -140,5 +141,63 @@ class QuantModeMutation:
             base_id=genome.id,
             new_id=f"{genome.id}-mut-{uuid.uuid4().hex[:8]}",
             description=f"out_proj_quant_mode {current} -> {flipped}",
+            _transform=transform,
+        )
+
+
+class MainblThresholdMutation:
+    """Nudges a genome's `mainbl_threshold` trait (see
+    gh05t3_binary.core.binary_layers.MagnitudeAwareINBL's mag_threshold
+    param, threaded through HybridBinaryAttention's q/k/v projections) up
+    or down in LOG-space by a bounded random factor -- not additive like
+    BinaryRatioJitterMutation. Magnitude thresholds span a genuinely wide
+    dynamic range (0.001 and 1.0 are both real, meaningfully different
+    settings); a fixed additive step would be too coarse near zero or too
+    fine at the top of the range.
+
+    `mainbl_threshold`'s documented default is 0.0 (gating disabled) --
+    log-space steps aren't defined at exactly zero, so a genome
+    currently at 0.0 first jumps to `floor_value` (a real, deliberate
+    "turn gating on" step) rather than the operator being inapplicable
+    or silently computing log(0).
+
+    Only applicable to genomes that already declare this trait --
+    genomes without it are left alone, same convention as the other
+    operators in this file.
+    """
+
+    def __init__(
+        self,
+        log_step: float = 0.4,
+        min_threshold: float = 1e-4,
+        max_threshold: float = 2.0,
+        floor_value: float = 1e-3,
+        rng: random.Random | None = None,
+    ):
+        self.log_step = log_step
+        self.min_threshold = min_threshold
+        self.max_threshold = max_threshold
+        self.floor_value = floor_value
+        self.rng = rng or random.Random()
+
+    def is_applicable(self, genome: Any, perf: dict[str, Any]) -> bool:
+        return "mainbl_threshold" in genome.traits
+
+    def create_mutation(self, genome: Any, perf: dict[str, Any]) -> Mutation:
+        current = float(genome.traits["mainbl_threshold"])
+        base = current if current > 0.0 else self.floor_value
+        factor = self.rng.choice([-1.0, 1.0]) * self.log_step
+        new_value = base * math.exp(factor)
+        new_value = max(self.min_threshold, min(self.max_threshold, new_value))
+
+        def transform(traits: dict[str, Any]) -> dict[str, Any]:
+            new_traits = dict(traits)
+            new_traits["mainbl_threshold"] = new_value
+            return new_traits
+
+        return Mutation(
+            base_id=genome.id,
+            new_id=f"{genome.id}-mut-{uuid.uuid4().hex[:8]}",
+            description=f"mainbl_threshold {current:.4g} -> {new_value:.4g}",
             _transform=transform,
         )

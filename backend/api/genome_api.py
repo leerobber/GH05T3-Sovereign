@@ -37,7 +37,12 @@ from backend.oss.core.genomic_substrate import GenomicSubstrate
 from backend.oss.core.omni_evolution import OmniEvolutionEngine
 from backend.oss.core.species_memory import SpeciesMemory
 from backend.oss.dna.genome_plane import GenomePlane
-from backend.oss.dna.mutation_operators import BinaryRatioJitterMutation, QuantModeMutation, StabilizerSwitchMutation
+from backend.oss.dna.mutation_operators import (
+    BinaryRatioJitterMutation,
+    MainblThresholdMutation,
+    QuantModeMutation,
+    StabilizerSwitchMutation,
+)
 from backend.oss.swarm.swarm_runtime import SwarmRuntime
 
 router = APIRouter(prefix="/oss/genome", tags=["genome"])
@@ -45,7 +50,7 @@ router = APIRouter(prefix="/oss/genome", tags=["genome"])
 _substrate = GenomicSubstrate(
     genome_plane=GenomePlane(),
     evolution_engine=OmniEvolutionEngine(
-        [BinaryRatioJitterMutation(), StabilizerSwitchMutation(), QuantModeMutation()]
+        [BinaryRatioJitterMutation(), StabilizerSwitchMutation(), QuantModeMutation(), MainblThresholdMutation()]
     ),
     species_memory=SpeciesMemory(),
     chronos_ledger=ChronosLedger(),

@@ -79,6 +79,7 @@ class BMEBridge:
                 binary_ratio=float(traits.get("binary_ratio", 0.95)),
                 stabilizer=str(traits.get("stabilizer", "mgc")),
                 out_proj_quant_mode=str(traits.get("out_proj_quant_mode", "ternary")),
+                mainbl_threshold=float(traits.get("mainbl_threshold", 0.0)),
             )
         finally:
             # Restore the caller's global RNG state -- seeding a genome's

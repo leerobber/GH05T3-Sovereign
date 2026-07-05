@@ -61,12 +61,27 @@ def test_out_proj_quant_mode_trait_actually_selects_the_real_layer_type():
     assert not isinstance(binary_model.transformer.layers[0].attention.out_proj, TernaryLinear)
 
 
+def test_mainbl_threshold_trait_actually_configures_the_real_gate():
+    """The whole point of MainblThresholdMutation: the trait must
+    genuinely reach MagnitudeAwareINBL's mag_threshold, not sit unused
+    in a dict."""
+    bridge = BMEBridge()
+    model = bridge.apply_genome_to_engine(
+        "g-threshold", {"num_layers": 1, "dim": 32, "num_heads": 2, "vocab_size": 20, "mainbl_threshold": 0.42}
+    )
+    attn = model.transformer.layers[0].attention
+    assert attn.q_proj.mag_threshold == 0.42
+    assert attn.k_proj.mag_threshold == 0.42
+    assert attn.v_proj.mag_threshold == 0.42
+
+
 def test_missing_traits_fall_back_to_documented_defaults():
     bridge = BMEBridge()
     model = bridge.apply_genome_to_engine("g-defaults", {})
 
     assert len(model.transformer.layers) == 4
     assert model.transformer.dim == 256
+    assert model.transformer.mainbl_threshold == 0.0  # gating disabled by default
     assert model.transformer.embedding.num_embeddings == 4096  # _DEFAULT_VOCAB_SIZE
 
 
