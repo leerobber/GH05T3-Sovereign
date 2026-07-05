@@ -201,3 +201,57 @@ class MainblThresholdMutation:
             description=f"mainbl_threshold {current:.4g} -> {new_value:.4g}",
             _transform=transform,
         )
+
+
+class TernarySparsityMutation:
+    """Nudges a genome's `ternary_sparsity_target` trait (see
+    gh05t3_binary.core.binary_layers.TernaryLinear's sparsity_target
+    param, threaded through HybridBinaryAttention.out_proj) up or down by
+    a bounded ADDITIVE step, clamped to (0, 1) -- unlike
+    MainblThresholdMutation's log-space steps, sparsity_target is already
+    a bounded fraction (not a wide-dynamic-range magnitude), so a fixed
+    additive step is the natural choice, same convention as
+    BinaryRatioJitterMutation.
+
+    Only applicable to genomes that both declare this trait AND have an
+    out_proj_quant_mode that is actually "ternary" (explicit or, since
+    "ternary" is HybridBinaryAttention's own default, absent) --
+    sparsity_target has zero effect on a BinaryLinear out_proj (see
+    HybridBinaryAttention.__init__), so mutating it for a genome
+    currently running "binary" out_proj would be a real no-op mutation
+    dressed up as a change, same anti-pattern this file otherwise avoids.
+    """
+
+    def __init__(
+        self,
+        step: float = 0.05,
+        min_target: float = 0.1,
+        max_target: float = 0.9,
+        rng: random.Random | None = None,
+    ):
+        self.step = step
+        self.min_target = min_target
+        self.max_target = max_target
+        self.rng = rng or random.Random()
+
+    def is_applicable(self, genome: Any, perf: dict[str, Any]) -> bool:
+        if "ternary_sparsity_target" not in genome.traits:
+            return False
+        return genome.traits.get("out_proj_quant_mode", "ternary") == "ternary"
+
+    def create_mutation(self, genome: Any, perf: dict[str, Any]) -> Mutation:
+        current = float(genome.traits["ternary_sparsity_target"])
+        delta = self.rng.choice([-1.0, 1.0]) * self.step
+        new_value = max(self.min_target, min(self.max_target, current + delta))
+
+        def transform(traits: dict[str, Any]) -> dict[str, Any]:
+            new_traits = dict(traits)
+            new_traits["ternary_sparsity_target"] = new_value
+            return new_traits
+
+        return Mutation(
+            base_id=genome.id,
+            new_id=f"{genome.id}-mut-{uuid.uuid4().hex[:8]}",
+            description=f"ternary_sparsity_target {current:.3f} -> {new_value:.3f}",
+            _transform=transform,
+        )

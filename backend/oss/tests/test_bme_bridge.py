@@ -83,6 +83,21 @@ def test_missing_traits_fall_back_to_documented_defaults():
     assert model.transformer.dim == 256
     assert model.transformer.mainbl_threshold == 0.0  # gating disabled by default
     assert model.transformer.embedding.num_embeddings == 4096  # _DEFAULT_VOCAB_SIZE
+    assert model.transformer.ternary_sparsity_target is None  # original fixed-threshold behavior
+
+
+def test_ternary_sparsity_target_trait_actually_configures_the_real_layer():
+    """The whole point of TernarySparsityMutation: the trait must
+    genuinely reach TernaryLinear.sparsity_target, not sit unused in a
+    dict."""
+    bridge = BMEBridge()
+    model = bridge.apply_genome_to_engine(
+        "g-sparsity",
+        {"num_layers": 1, "dim": 32, "num_heads": 2, "vocab_size": 20, "ternary_sparsity_target": 0.6},
+    )
+    out_proj = model.transformer.layers[0].attention.out_proj
+    assert isinstance(out_proj, TernaryLinear)
+    assert out_proj.sparsity_target == 0.6
 
 
 def test_repeat_calls_for_the_same_genome_id_return_the_identical_cached_object():

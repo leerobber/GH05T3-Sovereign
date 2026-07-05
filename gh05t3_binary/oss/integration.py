@@ -18,6 +18,7 @@ class GH05T3BinaryOSS(nn.Module):
         stabilizer: str = "mgc",
         out_proj_quant_mode: str = "ternary",
         mainbl_threshold: float = 0.0,
+        ternary_sparsity_target: float | None = None,
     ):
         super().__init__()
         self.transformer = GH05T3BinaryTransformer(
@@ -29,6 +30,7 @@ class GH05T3BinaryOSS(nn.Module):
             stabilizer=stabilizer,
             out_proj_quant_mode=out_proj_quant_mode,
             mainbl_threshold=mainbl_threshold,
+            ternary_sparsity_target=ternary_sparsity_target,
         )
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:

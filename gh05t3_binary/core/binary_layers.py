@@ -96,13 +96,22 @@ class TernaryLinear(nn.Module):
     of always contributing +-magnitude -- at 2 bits/weight instead of 1
     (still 16x smaller than fp32, vs. binary's 32x).
 
-    Threshold: delta = 0.7*mean(|W|) (the paper's fixed constant).
-    Scale: alpha = mean(|W_i| : |W_i| > delta), the least-squares-optimal
-    scale for the {-1,0,+1} approximation of W restricted to its nonzero
-    support. alpha is recomputed from the live fp32 weight every forward
-    pass and is itself differentiable (it's a masked mean of |weight|,
-    not passed through the STE), so gradient reaches it directly, on top
-    of the STE gradient reaching the +-1/0 decision.
+    Threshold: delta = 0.7*mean(|W|) (the paper's fixed constant) by
+    default. Scale: alpha = mean(|W_i| : |W_i| > delta), the
+    least-squares-optimal scale for the {-1,0,+1} approximation of W
+    restricted to its nonzero support. alpha is recomputed from the live
+    fp32 weight every forward pass and is itself differentiable (it's a
+    masked mean of |weight|, not passed through the STE), so gradient
+    reaches it directly, on top of the STE gradient reaching the +-1/0
+    decision.
+
+    sparsity_target: if None (default), uses the paper's fixed 0.7*mean(|W|)
+    threshold exactly -- preserves original behavior byte-for-byte. If
+    set to a float in (0,1), delta is instead set to that quantile of
+    |W| directly (torch.quantile), which genuinely targets that fraction
+    of weights being thresholded to zero -- not just exposing the 0.7
+    constant as a tunable multiplier, which would still be data-dependent
+    and only approximately related to the resulting sparsity.
 
     bias: if True, adds a full-precision (never quantized) bias term --
     lets this be a drop-in replacement for nn.Linear(..., bias=True)
@@ -111,15 +120,27 @@ class TernaryLinear(nn.Module):
     and compose their own denorm/scale terms instead.
     """
 
-    def __init__(self, in_features: int, out_features: int, bias: bool = False):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = False,
+        sparsity_target: float | None = None,
+    ):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(out_features, in_features) * 0.02)
         self.bias = nn.Parameter(torch.zeros(out_features)) if bias else None
+        if sparsity_target is not None and not (0.0 < sparsity_target < 1.0):
+            raise ValueError(f"sparsity_target must be in (0, 1), got {sparsity_target}")
+        self.sparsity_target = sparsity_target
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         w = self.weight
         with torch.no_grad():
-            delta = 0.7 * w.abs().mean()
+            if self.sparsity_target is None:
+                delta = 0.7 * w.abs().mean()
+            else:
+                delta = torch.quantile(w.abs(), self.sparsity_target)
 
         ternary = _TernarySTE.apply(w, delta)
         mask = (ternary != 0).to(w.dtype)

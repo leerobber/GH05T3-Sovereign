@@ -80,6 +80,11 @@ class BMEBridge:
                 stabilizer=str(traits.get("stabilizer", "mgc")),
                 out_proj_quant_mode=str(traits.get("out_proj_quant_mode", "ternary")),
                 mainbl_threshold=float(traits.get("mainbl_threshold", 0.0)),
+                ternary_sparsity_target=(
+                    float(traits["ternary_sparsity_target"])
+                    if "ternary_sparsity_target" in traits and traits["ternary_sparsity_target"] is not None
+                    else None
+                ),
             )
         finally:
             # Restore the caller's global RNG state -- seeding a genome's

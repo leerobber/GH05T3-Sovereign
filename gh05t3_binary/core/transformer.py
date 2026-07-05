@@ -59,6 +59,7 @@ class BinaryTransformerBlock(nn.Module):
         stabilizer: str = "mgc",
         out_proj_quant_mode: str = "ternary",
         mainbl_threshold: float = 0.0,
+        ternary_sparsity_target: float | None = None,
     ):
         super().__init__()
         self.dim = dim
@@ -69,7 +70,8 @@ class BinaryTransformerBlock(nn.Module):
         self._depth_aware = stabilizer == "damg"
 
         self.attention = HybridBinaryAttention(
-            dim, num_heads, binary_ratio, out_proj_quant_mode=out_proj_quant_mode, mainbl_threshold=mainbl_threshold,
+            dim, num_heads, binary_ratio, out_proj_quant_mode=out_proj_quant_mode,
+            mainbl_threshold=mainbl_threshold, ternary_sparsity_target=ternary_sparsity_target,
         )
         self.out_proj = MultiBitLinear4(dim, dim)
 
@@ -116,6 +118,7 @@ class GH05T3BinaryTransformer(nn.Module):
         stabilizer: str = "mgc",
         out_proj_quant_mode: str = "ternary",
         mainbl_threshold: float = 0.0,
+        ternary_sparsity_target: float | None = None,
     ):
         super().__init__()
         self.num_layers = num_layers
@@ -126,6 +129,7 @@ class GH05T3BinaryTransformer(nn.Module):
         self.stabilizer = stabilizer
         self.out_proj_quant_mode = out_proj_quant_mode
         self.mainbl_threshold = mainbl_threshold
+        self.ternary_sparsity_target = ternary_sparsity_target
 
         self.embedding = nn.Embedding(vocab_size, dim)
         self.layers = nn.ModuleList(
@@ -133,6 +137,7 @@ class GH05T3BinaryTransformer(nn.Module):
                 BinaryTransformerBlock(
                     dim, num_heads, max_depth=num_layers, binary_ratio=binary_ratio, stabilizer=stabilizer,
                     out_proj_quant_mode=out_proj_quant_mode, mainbl_threshold=mainbl_threshold,
+                    ternary_sparsity_target=ternary_sparsity_target,
                 )
                 for _ in range(num_layers)
             ]

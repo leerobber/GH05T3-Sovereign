@@ -15,6 +15,7 @@ from backend.oss.dna.mutation_operators import (
     MainblThresholdMutation,
     QuantModeMutation,
     StabilizerSwitchMutation,
+    TernarySparsityMutation,
 )
 from backend.oss.dna.selection_strategies import HighestScoreSelection, LowestLatencySelection
 
@@ -152,6 +153,52 @@ def test_mainbl_threshold_mutation_not_applicable_without_the_trait():
     op = MainblThresholdMutation()
     genome = Genome(id="g", traits={"binary_ratio": 0.9})
     assert not op.is_applicable(genome, {})
+
+
+def test_ternary_sparsity_mutation_moves_additively_and_clamps():
+    op = TernarySparsityMutation(step=0.05, min_target=0.1, max_target=0.9, rng=random.Random(7))
+    genome = Genome(id="g", traits={"ternary_sparsity_target": 0.5})
+
+    assert op.is_applicable(genome, {})
+    mutation = op.create_mutation(genome, {})
+    new_value = mutation.apply(genome.traits)["ternary_sparsity_target"]
+
+    assert new_value == pytest.approx(0.55) or new_value == pytest.approx(0.45)
+
+
+def test_ternary_sparsity_mutation_clamps_to_bounds():
+    op = TernarySparsityMutation(step=10.0, min_target=0.1, max_target=0.9, rng=random.Random(5))
+    genome = Genome(id="g", traits={"ternary_sparsity_target": 0.5})
+
+    mutation = op.create_mutation(genome, {})
+    new_value = mutation.apply(genome.traits)["ternary_sparsity_target"]
+
+    assert 0.1 <= new_value <= 0.9
+
+
+def test_ternary_sparsity_mutation_not_applicable_without_the_trait():
+    op = TernarySparsityMutation()
+    genome = Genome(id="g", traits={"binary_ratio": 0.9})
+    assert not op.is_applicable(genome, {})
+
+
+def test_ternary_sparsity_mutation_not_applicable_when_out_proj_is_binary():
+    """A genome running a BinaryLinear out_proj has no real use for
+    sparsity_target -- see HybridBinaryAttention, where it's only ever
+    passed to a TernaryLinear. Mutating it would be a no-op dressed up
+    as a real change."""
+    op = TernarySparsityMutation()
+    genome = Genome(id="g", traits={"ternary_sparsity_target": 0.5, "out_proj_quant_mode": "binary"})
+    assert not op.is_applicable(genome, {})
+
+
+def test_ternary_sparsity_mutation_applicable_when_quant_mode_defaulted():
+    """out_proj_quant_mode absent means HybridBinaryAttention's own
+    default ("ternary") applies -- the mutation must not require the
+    trait to be spelled out explicitly."""
+    op = TernarySparsityMutation()
+    genome = Genome(id="g", traits={"ternary_sparsity_target": 0.5})
+    assert op.is_applicable(genome, {})
 
 
 def test_highest_score_selection_picks_the_real_max():

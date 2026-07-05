@@ -37,6 +37,7 @@ class HybridBinaryAttention(nn.Module):
         binary_ratio: float = 0.95,
         out_proj_quant_mode: str = "ternary",
         mainbl_threshold: float = 0.0,
+        ternary_sparsity_target: float | None = None,
     ):
         super().__init__()
         self.dim = dim
@@ -60,8 +61,12 @@ class HybridBinaryAttention(nn.Module):
         self.v_proj = MagnitudeAwareINBL(dim, dim, mag_threshold=mainbl_threshold)
 
         if out_proj_quant_mode == "ternary":
-            self.out_proj = TernaryLinear(dim, dim, bias=True)
+            self.out_proj = TernaryLinear(dim, dim, bias=True, sparsity_target=ternary_sparsity_target)
         else:
+            # ternary_sparsity_target has no meaning for a BinaryLinear
+            # out_proj -- deliberately not passed through here, so
+            # out_proj simply has no sparsity_target attribute at all
+            # rather than silently ignoring a value nothing reads.
             self.out_proj = BinaryLinear(dim, dim, bias=True)
         self.log_temperature = nn.Parameter(torch.zeros(1))
 
