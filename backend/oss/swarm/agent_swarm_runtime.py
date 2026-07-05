@@ -9,10 +9,14 @@ Uses PyTorch's native batch dimension for "batching" -- genuinely real
 and correct, and doesn't need any custom Rust-side grouping logic yet,
 since every agent in this first pass shares one model (see
 swarm_agent.py's docstring for why per-agent configs aren't wired up
-yet). Real AVX-512 kernel acceleration (gh05t3_binary.inference.
-fast_inference.enable_fast_inference) can be layered onto the shared
-model exactly like it already is for the genome-evaluation path -- not
-duplicated here.
+yet). Real AVX-512 kernel acceleration is wired in via
+enable_fast_inference() below, which calls the same, already-verified
+gh05t3_binary.inference.fast_inference.enable_fast_inference() used by
+the genome-evaluation path -- not a reimplementation. Known limitation,
+inherited from that function: it only patches true BinaryLinear
+instances (found via isinstance), not TernaryLinear (e.g.
+attention.out_proj) -- so even with fast inference enabled, out_proj
+still runs the plain PyTorch ternary forward.
 """
 from __future__ import annotations
 
@@ -23,9 +27,34 @@ from gh05t3_binary.oss.integration import GH05T3BinaryOSS
 
 
 class AgentSwarmRuntime:
-    def __init__(self, model: GH05T3BinaryOSS):
+    def __init__(self, model: GH05T3BinaryOSS, packed_weights_dir: str | None = None):
         self.model = model
         self.model.eval()
+        self.fast_inference_enabled = False
+        self.patched_layer_count = 0
+        if packed_weights_dir is not None:
+            self.enable_fast_inference(packed_weights_dir)
+
+    def enable_fast_inference(self, packed_weights_dir: str, lib_path: str | None = None) -> int:
+        """Patches this runtime's model's real BinaryLinear instances to
+        use the verified Rust AVX-512 kernel (see
+        gh05t3_binary.inference.fast_inference.enable_fast_inference --
+        this calls that function directly, not a reimplementation).
+
+        Requires packed weights already exported (pack_weights.py) from
+        a checkpoint with the SAME architecture as this runtime's model
+        -- a shape mismatch surfaces as a real error from the
+        underlying kernel, not something silently swallowed here.
+
+        Entirely optional: run_batch works against the plain PyTorch
+        model if this is never called, or if it's called but patches
+        zero layers (e.g. an untrained/empty checkpoint)."""
+        from gh05t3_binary.inference.fast_inference import enable_fast_inference as _enable_fast_inference
+
+        patched = _enable_fast_inference(self.model, packed_weights_dir, lib_path=lib_path)
+        self.fast_inference_enabled = patched > 0
+        self.patched_layer_count = patched
+        return patched
 
     def run_batch(self, agents: list[SwarmAgent], input_ids: torch.Tensor) -> dict[int, torch.Tensor]:
         """Runs ONE real forward pass over `input_ids` (shape
