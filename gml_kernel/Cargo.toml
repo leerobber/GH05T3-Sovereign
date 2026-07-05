@@ -11,7 +11,21 @@ crate-type = ["cdylib", "rlib"]
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Added for runtime/ (async episode-loop harness around the existing
+# synchronous kernel/gh05t3 engine). Narrower feature set than "full" --
+# this runtime only needs a multi-threaded executor, the #[tokio::main]/
+# #[tokio::test] macros, and sleep/Duration, not tokio's fs/net/process/
+# signal machinery.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+async-trait = "0.1"
+thiserror = "1"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
 
 [[bin]]
 name = "gml_kernel_main"
 path = "src/main.rs"
+
+[[bin]]
+name = "gh05t3_runtime"
+path = "src/bin/runtime_main.rs"
