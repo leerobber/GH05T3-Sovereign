@@ -20,3 +20,10 @@ corporate AI infrastructure.
 - Dependency sentinels (FS, NET, GPU, WSL)
 - Evolution fitness scoring
 - Autonomous orchestration loop
+
+## Architecture decisions
+
+See [docs/architecture/](docs/architecture/README.md) for a real, tested
+record of what was built and why — quantization approach, Rust kernel
+strategy, the genome/evolution subsystem, and proposals that were
+evaluated and rejected (with the reasons).
