@@ -4,12 +4,12 @@ get_slack_token.py — one-shot OAuth flow to get a properly-scoped Slack bot to
 Run: python get_slack_token.py
 Opens browser -> you click Allow -> token is saved to .env automatically.
 """
-import http.server, urllib.parse, webbrowser, threading, json, sys
+import http.server, urllib.parse, webbrowser, threading, json, os, sys
 from pathlib import Path
 import requests
 
-CLIENT_ID     = "11126553666658.11119418273191"
-CLIENT_SECRET = "09a430aff14a11cc1e284a26f9d67fc9"
+CLIENT_ID     = os.environ.get("SLACK_CLIENT_ID", "")
+CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", "")
 REDIRECT_URI  = "http://localhost:3000/callback"
 PORT          = 3000
 
@@ -119,6 +119,11 @@ def update_env(token: str, team_id: str):
 
 
 if __name__ == "__main__":
+    if not CLIENT_ID or not CLIENT_SECRET:
+        print("  [ERROR] Set SLACK_CLIENT_ID and SLACK_CLIENT_SECRET env vars first")
+        print("  (Slack app -> Basic Information -> App Credentials).")
+        sys.exit(1)
+
     # Add redirect URI to app first
     print("+---------------------------------------------------+")
     print("|  GH05T3 Slack OAuth Token Generator               |")
@@ -168,7 +173,6 @@ if __name__ == "__main__":
 
     print()
     print("  Setting up SovereignNation workspace channels...")
-    import os
     os.environ["SLACK_BOT_TOKEN"] = token
     sys.path.insert(0, str(Path(__file__).parent))
     import slack_notify
