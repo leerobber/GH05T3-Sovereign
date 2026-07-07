@@ -37,6 +37,11 @@ gh05t3_binary/inference/checkpoints/
 # backend/data/* for this one file specifically).
 !backend/data/aethyro_swarm.bin
 
+# aetherflux_bridge.py's domain->slot map -- must travel with
+# aethyro_swarm.bin (slot indices are only meaningful relative to one
+# specific ledger file), same reasoning as the exception above.
+!backend/data/aetherflux_slots.json
+
 # Build artifacts
 *.log
 *.tmp
