@@ -11,12 +11,14 @@ confirmed by actually running the suites, not by inspection alone:
    being a hard, unconditional `import torch` in ~20 core files —
    `gh05t3_binary/core/{binary_layers,transformer,attention,stabilizers}.py`,
    `gh05t3_binary/hardware/{detector,dispatcher}.py`,
-   `gh05t3_binary/inference/*.py`, `backend/oss/swarm/*.py`, and
-   `backend/integration/{gml_kernel_bridge,binary_backend}.py`. A fresh
-   `pip install -r backend/requirements.txt` followed by anything that
-   touches real inference/swarm code hit `ModuleNotFoundError: No module
-   named 'torch'` immediately. `numpy` was already declared; `torch` was
-   not.
+   `gh05t3_binary/inference/*.py`, and `backend/oss/swarm/*.py` (plus
+   lazy, function-level imports in
+   `backend/integration/{gml_kernel_bridge,binary_backend}.py` — not a
+   hard import there, but still required the moment those code paths
+   run). A fresh `pip install -r backend/requirements.txt` followed by
+   anything that touches real inference/swarm code hit
+   `ModuleNotFoundError: No module named 'torch'` immediately. `numpy`
+   was already declared; `torch` was not.
 2. No CI existed (`.github/workflows` was absent) despite a real, fast,
    fully-green test suite: 21/21 `cargo test` in `gml_kernel`, and
    116-119/119 `pytest` across `backend/oss/tests`, `backend/tests`, and
