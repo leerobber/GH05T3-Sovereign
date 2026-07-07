@@ -137,6 +137,15 @@ stripe==15.0.1
 tenacity==9.1.4
 tiktoken==0.12.0
 tokenizers==0.22.2
+# Hard, unconditional import in gh05t3_binary/core (binary_layers, transformer,
+# attention, stabilizers), gh05t3_binary/hardware (detector, dispatcher), and
+# gh05t3_binary/inference/train, backend/oss/swarm -- not optional. Imported
+# lazily (inside functions) in backend/integration/gml_kernel_bridge.py and
+# binary_backend.py, but still required at runtime the moment those code
+# paths execute. Pinned to the generic (CPU-capable) build here; on
+# Windows/Blackwell (RTX 5050) hardware follow GH05T3's cu128 index instructions instead:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+torch==2.12.1
 tqdm==4.67.3
 typer==0.24.1
 typing-inspection==0.4.2

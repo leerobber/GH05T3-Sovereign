@@ -18,6 +18,7 @@ the doc.
 | [0006](0006-relationship-to-gh05t3-and-sovereign-core.md) | Relationship to GH05T3 and sovereign-core | Accepted, ongoing tension noted |
 | [0007](0007-rejected-proposals.md) | Rejected designs (why, and what was wrong with each) | Reference only |
 | [0008](0008-remove-hardcoded-slack-oauth-values.md) | Remove hardcoded Slack OAuth values | Resolved |
+| [0009](0009-ci-and-torch-dependency-fix.md) | Add CI, declare the missing torch dependency | Resolved |
 
 ## How to add a new one
 
